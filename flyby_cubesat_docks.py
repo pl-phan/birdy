@@ -5,6 +5,7 @@ from numpy import pi
 
 from docks import docks, center_time_index, plot_trajectory
 from flyby_utils import shift_pos, close_approach_calculator, params_to_coords, coords_to_params
+from utils import measurements
 
 # # # # # # # # # # # # # # # #
 # Simulation
@@ -95,13 +96,8 @@ fig1.show()
 
 
 # measurements
-# ranging
-df_relative = df_cubesat - df_spacecraft
-rho = df_relative[['x', 'y', 'z']].apply(np.linalg.norm, axis=1)
-tof = 2. * rho / c
-# doppler frequency
-v_r = (df_relative.vx * df_relative.x + df_relative.vy * df_relative.y + df_relative.vz * df_relative.z) / rho
-freq = f0 * (1. - 2. * v_r / c)
+tof, freq = measurements(df_cubesat, df_spacecraft, f0=f0)
+tof_earth, freq_earth = measurements(df_spacecraft, df_observer, f0=f0)
 
 # # measurement integration
 # win_size = int(int_time / dt)
@@ -132,16 +128,14 @@ fig3.add_scatter(x=tof.index, y=tof, mode='markers', marker={'symbol': 'cross'},
 
 # Residuals
 
-# residuals without asteroid
-# ranging
-df_relative = df_cubesat_ref - df_satellite_ref
-rho = df_relative[['x', 'y', 'z']].apply(np.linalg.norm, axis=1)
-tof_ref = 2. * rho / c
+# measurements without asteroid
+tof_ref, freq_ref = measurements(df_cubesat_ref, df_spacecraft_ref, f0=f0)
 tof_residuals = tof - tof_ref
-# doppler frequency
-v_r = (df_relative.vx * df_relative.x + df_relative.vy * df_relative.y + df_relative.vz * df_relative.z) / rho
-freq_ref = f0 * (1. - 2. * v_r / c)
 freq_residuals = freq - freq_ref
+
+tof_earth_ref, freq_earth_ref = measurements(df_spacecraft_ref, df_observer, f0=f0)
+tof_earth_residuals = tof_earth - tof_earth_ref
+freq_earth_residuals = freq_earth - freq_earth_ref
 
 # plot model
 fig2.add_scatter(x=freq_ref.index, y=freq_ref, mode='lines', line={'color': 'red'}, name='doppler reference')
@@ -153,9 +147,13 @@ fig3.show()
 fig4 = go.Figure()
 fig4.add_scatter(x=freq_residuals.index, y=freq_residuals, mode='markers',
                  marker={'symbol': 'cross', 'color': 'red'}, name='residuals')
+fig4.add_scatter(x=freq_earth_residuals.index, y=freq_earth_residuals, mode='markers',
+                 marker={'symbol': 'cross', 'color': 'blue'}, name='residuals_earth')
 fig4.show()
 
 fig5 = go.Figure()
 fig5.add_scatter(x=tof_residuals.index, y=tof_residuals, mode='markers',
                  marker={'symbol': 'cross', 'color': 'red'}, name='residuals')
+fig5.add_scatter(x=tof_earth_residuals.index, y=tof_earth_residuals, mode='markers',
+                 marker={'symbol': 'cross', 'color': 'blue'}, name='residuals_earth')
 fig5.show()
