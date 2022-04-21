@@ -41,4 +41,3 @@ def measurements(probe, observer, f0, integration_time=None, noise=None):
     frequency = f0 * (1. - 2. * v_r / c)
 
     return time_of_flight, frequency
-git
