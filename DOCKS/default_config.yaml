@@ -1,0 +1,58 @@
+initialConditions:
+  file_path: init.txt
+  frame: ICRF
+  format: [MJD_2col, KM, KM/S]
+  center: [predefined, [ssb]]
+
+ephemInput:
+  spice_kernels: ../../kernel
+  text_files: [MJD_2col, KM, KM/S]
+
+perturbations:
+  predefined_bodies: [sun, jupiter_barycenter, saturn_barycenter]
+  new_bodies_added: false
+  complex_grav_model_activated: false
+  non_grav_perturbations:
+  propulsion_burns_file:
+
+new_grav_bodies:
+  body1:
+    name:
+    mu:
+    ephFile:
+    naifId:
+
+complex_grav_bodies:
+  body1:
+    name:
+    naifId:
+    ephFile:
+    rotMatrixFile:
+    quatFile:
+    sphCoeffFile:
+    sphHarmDegree:
+
+probeFeatures:
+  mass:
+  area:
+  reflectivity:
+
+numericalMethod:
+  method: rk4
+  tolerance:
+  safety_factor:
+
+timeSettings:
+  method: Duration
+  propagation_time: [1.0, 0:0:0.0]
+  time_step_unit: seconds
+  time_step: [1.0, 1.0, 1.0]
+
+output:
+  directory: .
+  file_name: traj.txt
+  frame: ICRF
+  format: [MJD_2col, KM, KM/S, KM/S^2]
+  step_divider: 1
+  center: [predefined, [ssb]]
+
