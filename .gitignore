@@ -1,6 +1,7 @@
 DOCKS/docks_tools/
 DOCKS/kernel/
 DOCKS/Propagator/
+DOCKS/bodies/*
 
 __pycache__/
 .idea/
