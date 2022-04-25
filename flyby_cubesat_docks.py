@@ -22,10 +22,10 @@ M = 1.7e16  # kg
 GM = G * M  # m3/s2
 
 # # flyby parameters
-v = 14.99e3  # m/s
+v = 500.  # m/s
 b_sat = 3000e3  # m
-b_cub = -R * 10.  # m
-alpha = 172.18 * pi / 180.  # rad
+b_cub = 300e3  # m
+alpha = 170. * pi / 180.  # rad
 beta = 3.0 * pi / 180.  # rad
 t_ca = pd.to_datetime('2010-07-10 15:46:04')
 
@@ -34,9 +34,9 @@ f0 = 8.4e9  # Hz
 t0 = pd.to_datetime('2010-07-10 11:45:00')
 t1 = pd.to_datetime('2010-07-10 21:45:00')
 dt = 10.
-int_time = 60.  # s
-freq_noise = 4e-3  # Hz
-tof_noise = 5e-1  # s
+# int_time = 60.  # s
+# freq_noise = 4e-3  # Hz
+# tof_noise = 5e-1  # s
 
 # Propagation
 obs_pos_init = np.array((4.63302E+10, -1.44387E+11, 5.34725E+06))
