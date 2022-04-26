@@ -91,16 +91,21 @@ def docks_parser(filename, convert_to_meters=True):
     return df
 
 
-def center_time_index(df, center_timestamp):
+def relative_time_index(df, center_timestamp):
     df.index = (df.index - center_timestamp) / pd.to_timedelta(1, 's')
     return df
 
 
-def plot_trajectory(df, name, figure):
-    figure.add_scatter3d(
-        x=df.x, y=df.y, z=df.z, mode='markers', name=name,
-        marker={'size': 1, 'color': df.index, 'colorscale': 'viridis'}
-    )
+def plot_trajectory(df, name, figure, backend='plotly'):
+    if backend == 'plotly':
+        figure.add_scatter3d(
+            x=df.x, y=df.y, z=df.z, mode='markers', name=name,
+            marker={'size': 1, 'color': df.index, 'colorscale': 'viridis'}
+        )
+    # elif backend == 'matplotlib':
+    #     figure.plot(df.x, df.y, '.-', label=name)
+    else:
+        raise NotImplementedError('{} unknown'.format(backend))
 
 
 if __name__ == '__main__':
@@ -117,9 +122,9 @@ if __name__ == '__main__':
     cub_vel = df_cubesat[['vx', 'vy', 'vz']].mean().to_numpy()
     _, _, t_ca = close_approach_calculator(cub_pos, cub_vel, lut_pos, lut_vel)
     t_ca = t0 + pd.to_timedelta(t_ca, 's')
-    df_lutetia = center_time_index(df_lutetia, t_ca)
-    df_rosetta = center_time_index(df_rosetta, t_ca)
-    df_cubesat = center_time_index(df_cubesat, t_ca)
+    df_lutetia = relative_time_index(df_lutetia, t_ca)
+    df_rosetta = relative_time_index(df_rosetta, t_ca)
+    df_cubesat = relative_time_index(df_cubesat, t_ca)
 
     # Plot trajectories
     fig = go.Figure(layout={'scene': {'aspectmode': 'data'}})

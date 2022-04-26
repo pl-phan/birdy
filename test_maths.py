@@ -1,5 +1,3 @@
-from builtins import enumerate
-
 import numpy as np
 import plotly.graph_objects as go
 from scipy.integrate import RK45
@@ -62,7 +60,7 @@ def propagate(ts, mass):
         ts.append(integrator.t)
         ys.append(integrator.y)
         dts.append(integrator.step_size)
-    ts = np.array(ts[:-1])
+    # ts = np.array(ts[:-1])
     pos, vel = np.split(np.stack(ys[:-1]), 2, axis=1)
     # pos, vel, d_err = np.split(np.stack(ys[:-1]), 3, axis=1)
 
@@ -76,7 +74,7 @@ def propagate(ts, mass):
 
 # measurements
 D = propagate(None, m0)
-noise = 5.  # m/s
+noise = 1.  # m/s
 D += np.random.normal(scale=noise, size=D.shape)
 # # plot measurements
 # fig1 = go.Figure()
@@ -97,6 +95,7 @@ D += np.random.normal(scale=noise, size=D.shape)
 # fig3.add_scatter(x=masses, y=mass_est, mode='markers', name='estimate')
 # fig3.show()
 
-p_opt, p_cov = curve_fit(propagate, None, D, p0=2. * m0)
+p_opt, p_cov = curve_fit(propagate, None, D, p0=1e18, bounds=(5e17, 1e19))
 sigma = p_cov.diagonal() ** 0.5
 print('{}, {}%'.format(p_opt, 100. * sigma / p_opt))
+print('[{} -> {}]'.format(p_opt - 2. * sigma, p_opt + 2. * sigma))

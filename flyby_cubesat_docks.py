@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from numpy import pi
 
-from docks import docks, center_time_index, plot_trajectory
+from docks import docks, relative_time_index, plot_trajectory
 from flyby_utils import shift_pos, close_approach_calculator, params_to_coords, coords_to_params
 from utils import measurements
 
@@ -77,12 +77,12 @@ print(t_ca)
 print(b_ / 1e3, v_ / 1e3)
 print(alpha_ * 180. / pi, beta_ * 180. / pi)
 
-df_observer = center_time_index(df_observer, t_ca)
-df_asteroid = center_time_index(df_asteroid, t_ca)
-df_spacecraft = center_time_index(df_spacecraft, t_ca)
-df_satellite_ref = center_time_index(df_spacecraft_ref, t_ca)
-df_cubesat = center_time_index(df_cubesat, t_ca)
-df_cubesat_ref = center_time_index(df_cubesat_ref, t_ca)
+df_observer = relative_time_index(df_observer, t_ca)
+df_asteroid = relative_time_index(df_asteroid, t_ca)
+df_spacecraft = relative_time_index(df_spacecraft, t_ca)
+df_satellite_ref = relative_time_index(df_spacecraft_ref, t_ca)
+df_cubesat = relative_time_index(df_cubesat, t_ca)
+df_cubesat_ref = relative_time_index(df_cubesat_ref, t_ca)
 
 
 # plot trajectory
