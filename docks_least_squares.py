@@ -19,7 +19,7 @@ t_end = pd.to_datetime('2010-07-10 21:45:00')
 dt = 10.
 int_time = 60.  # s
 tof_noise = 1e-1  # s
-freq_noise = 4e-3  # Hz
+freq_noise = 2e-3  # Hz
 
 
 def reference_data(mass, obs_init, ast_init, v, b_sat, b_cub, alpha, beta, t_ca, verbose=False):

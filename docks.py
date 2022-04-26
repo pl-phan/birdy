@@ -10,7 +10,9 @@ from flyby_utils import close_approach_calculator
 from utils import mjd2_to_datetime, datetime_to_mjd2
 
 
-DOCKS_ENV = '~/.envs/docks_local/bin/python'
+LOCAL_DISK = '/local_disk'
+DOCKS_DIR = os.path.join(LOCAL_DISK, 'pphan/DOCKS')
+DOCKS_ENV = os.path.join(LOCAL_DISK, 'pphan/envs/docks/bin/python')
 
 
 def docks(name, t_start, t_end, dt, init_pos, init_vel, asteroid_name=None, asteroid_mu=None):
@@ -19,7 +21,9 @@ def docks(name, t_start, t_end, dt, init_pos, init_vel, asteroid_name=None, aste
     if isinstance(t_end, str):
         t_end = pd.to_datetime(t_end)
 
-    test_dirs = [os.path.join('./DOCKS/bodies', name) for name in os.listdir('./DOCKS/bodies') if name.startswith(name)]
+    test_dirs = [os.path.join(DOCKS_DIR, 'bodies', name)
+                 for name in os.listdir(os.path.join(DOCKS_DIR, 'bodies'))
+                 if name.startswith(name)]
     work_dir = config_writer(name, t_start, t_end, dt, init_pos, init_vel, asteroid_name, asteroid_mu)
 
     for test_dir in test_dirs:
@@ -36,15 +40,15 @@ def docks(name, t_start, t_end, dt, init_pos, init_vel, asteroid_name=None, aste
 
     # Else create new trajectory
     print('Creating new dir {}'.format(work_dir))
-    os.system(' '.join((DOCKS_ENV, './DOCKS/Propagator/propagator.py', os.path.join(work_dir, 'config.yaml'))))
+    os.system(' '.join((DOCKS_ENV, os.path.join(DOCKS_DIR, 'Propagator/propagator.py'), os.path.join(work_dir, 'config.yaml'))))
     return os.path.basename(work_dir), docks_parser(os.path.join(work_dir, 'traj.txt'))
 
 
 def config_writer(name, t_start, t_end, dt, init_pos, init_vel, asteroid_name=None, asteroid_mu=None):
-    work_dir = os.path.join('./DOCKS/bodies/', '{}_{}'.format(name, pd.Timestamp.now().strftime('%Y%m%d%H%M%S')))
+    work_dir = os.path.join(DOCKS_DIR, 'bodies', '{}_{}'.format(name, pd.Timestamp.now().strftime('%Y%m%d%H%M%S')))
 
     # Initial conditions file
-    init_txt = '{:d}    {:d}    {:.15E}    {:.15E}    {:.15E}    {:.15E}    {:.15E}    {:.15E}'.format(
+    init_txt = '{:d}    {:d}    {:.17E}    {:.17E}    {:.17E}    {:.17E}    {:.17E}    {:.17E}\n'.format(
         *datetime_to_mjd2(t_start), *(init_pos / 1e3), *(init_vel / 1e3)
     )
     os.makedirs(work_dir, exist_ok=True)
@@ -53,7 +57,7 @@ def config_writer(name, t_start, t_end, dt, init_pos, init_vel, asteroid_name=No
 
     # Configuration file
     yaml = YAML()
-    with open('./DOCKS/default_config.yaml', 'r') as f:
+    with open('default_config.yaml', 'r') as f:
         config = yaml.load(f)
     duration = (t_end - t_start).components
     config['timeSettings']['propagation_time'][0] = float(duration.days)
@@ -64,7 +68,7 @@ def config_writer(name, t_start, t_end, dt, init_pos, init_vel, asteroid_name=No
     if asteroid_name is not None:
         config['perturbations']['new_bodies_added'] = True
         config['new_grav_bodies']['body1']['name'] = asteroid_name
-        config['new_grav_bodies']['body1']['mu'] = asteroid_mu
+        config['new_grav_bodies']['body1']['mu'] = '{:.17E}'.format(asteroid_mu)
         config['new_grav_bodies']['body1']['ephFile'] = os.path.join('../', asteroid_name, 'traj.txt')
     with open(os.path.join(work_dir, 'config.yaml'), 'w') as f:
         yaml.dump(config, f)

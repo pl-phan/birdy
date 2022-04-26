@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from numpy import pi
+from plotly.subplots import make_subplots
 from scipy.optimize import curve_fit
 
 from docks import docks, relative_time_index, plot_trajectory
@@ -16,12 +17,12 @@ c = 3e8  # m/s
 f0 = 8.4e9  # Hz
 t_start = pd.to_datetime('2010-07-10 11:45:00')
 t_end = pd.to_datetime('2010-07-10 21:45:00')
-dt = 30.
-# freq_noise = 2e-3  # Hz
-delay_noise = 2e-9  # s
+dt = 10.
+tof_noise = 1e-1  # s
+freq_noise = 2e-3  # Hz
 
 
-def generate_data(mass, obs_init, ast_init, v, b_sat, alpha, beta, t_ca, verbose=False):
+def reference_data(mass, obs_init, ast_init, v, b_sat, alpha, beta, t_ca, verbose=False):
     # flyby parameters
     mu = G * mass  # m3/s2
 
@@ -65,14 +66,15 @@ def generate_data(mass, obs_init, ast_init, v, b_sat, alpha, beta, t_ca, verbose
         fig0.show()
 
     # measurements
-    delay_earth, _ = measurements(df_spacecraft, df_observer, f0=f0)
-    delay_earth += np.random.normal(scale=delay_noise, size=len(delay_earth))
+    tof_earth, freq_earth = measurements(df_spacecraft, df_observer, f0=f0)
+    tof_earth += np.random.normal(scale=tof_noise, size=len(tof_earth))
+    freq_earth += np.random.normal(scale=freq_noise, size=len(freq_earth))
 
     sat_init = np.concatenate((sat_pos_init, sat_vel_ca))
-    return delay_earth, sat_init
+    return (tof_earth, freq_earth), sat_init
 
 
-def generate_model(mass, obs_init, ast_init, sat_init):
+def simulated_data(mass, obs_init, ast_init, sat_init):
     mu = G * mass  # m3/s2
 
     # propagation
@@ -85,33 +87,40 @@ def generate_model(mass, obs_init, ast_init, sat_init):
     df_spacecraft = relative_time_index(df_spacecraft, t_start)
 
     # measurements
-    delay_earth, _ = measurements(df_spacecraft, df_observer, f0=f0)
+    tof_earth, freq_earth = measurements(df_spacecraft, df_observer, f0=f0)
 
-    return delay_earth
+    return tof_earth, freq_earth
 
 
 if __name__ == '__main__':
     obs = np.array((4.6E+10, -1.4E+11, 5.3E+06, 2.8E+04, 9.1E+03, -2.5E-01))
     ast = np.array((-4.0E+11, -6.5E+10, 2.1E+10, 4.6E+03, -1.6E+04, -3.8E+02))
 
-    delay_data, sat = generate_data(
+    (tof_data, freq_data), sat = reference_data(
         mass=1.7e18, obs_init=obs, ast_init=ast,
         v=15e3, b_sat=3000e3, alpha=170. * pi / 180., beta=3. * pi / 180.,
         t_ca=pd.to_datetime('2010-07-10 15:46:04'), verbose=False
     )
 
-    fig = go.Figure()
+    tof_ref, freq_ref = simulated_data(0., obs, ast, sat)
+    y = np.concatenate(((tof_data - tof_ref).to_numpy(), (freq_data - freq_ref).to_numpy()))
 
-    delay_ref = generate_model(0., obs, ast, sat)
-    y = (delay_data - delay_ref).to_numpy()
-    fig.add_scatter(x=delay_ref.index, y=y, mode='markers', marker={'symbol': 'cross'}, name='time of flight')
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.01)
+    fig.add_scatter(x=tof_data.index, y=tof_data - tof_ref, name='data',
+                    col=1, row=1, mode='markers', marker={'symbol': 'cross'})
+    fig.add_scatter(x=freq_data.index, y=freq_data - freq_ref, name='data',
+                    col=1, row=2, mode='markers', marker={'symbol': 'cross'})
+
 
     def wrapper(_, mass):
         print('Called with m = {}'.format(mass))
-        delay_model = generate_model(float(mass), obs, ast, sat)
-        x = (delay_model - delay_ref).to_numpy()
-        fig.add_scatter(x=delay_ref.index, y=x, mode='lines', marker={'symbol': 'cross'}, name='mass {}'.format(mass))
-        return x
+        tof_model, freq_model = simulated_data(float(mass), obs, ast, sat)
+        r = np.concatenate(((tof_model - tof_ref).to_numpy(), (freq_model - freq_ref).to_numpy()))
+        fig.add_scatter(x=tof_model.index, y=tof_model - tof_ref, name='mass {}'.format(mass),
+                        col=1, row=1, mode='lines')
+        fig.add_scatter(x=freq_model.index, y=freq_model - freq_ref, name='mass {}'.format(mass),
+                        col=1, row=2, mode='lines')
+        return r
 
     p_opt, p_cov = curve_fit(wrapper, xdata=None, ydata=y, p0=1e18, epsfcn=1e-9)
     sigma = p_cov.diagonal() ** 0.5
