@@ -18,11 +18,12 @@ f0 = 8.4e9  # Hz
 t_start = pd.to_datetime('2010-07-10 11:45:00')
 t_end = pd.to_datetime('2010-07-10 21:45:00')
 dt = 30.
-delay_noise = 2e-9  # s
-freq_noise = 2e-3  # Hz
+int_time = 60.  # s
+delay_noise = 2e-7  # s
+freq_noise = 2e-1  # Hz
 
 
-def generate_data(mass, obs_init, ast_init, v, b_sat, alpha, beta, t_ca, verbose=False):
+def generate_data(mass, obs_init, ast_init, v, b_sat, b_cub, alpha, beta, t_ca, verbose=False):
     # flyby parameters
     mu = G * mass  # m3/s2
 
@@ -41,6 +42,10 @@ def generate_data(mass, obs_init, ast_init, v, b_sat, alpha, beta, t_ca, verbose
     sat_pos_init = shift_pos(sat_pos_ca, sat_vel_ca, t_from=t_ca, t_to=t_start)
     _, df_spacecraft = docks('spacecraft', t_start, t_end, dt, sat_pos_init, sat_vel_ca, ast_name, mu)
 
+    cub_pos_ca = (sat_pos_ca - ast_pos_ca) * (b_cub / b_sat) + ast_pos_ca
+    cub_pos_init = shift_pos(cub_pos_ca, sat_vel_ca, t_from=t_ca, t_to=t_start)
+    _, df_cubesat = docks('cubesat', t_start, t_end, dt, cub_pos_init, sat_vel_ca, ast_name, mu)
+
     if verbose:
         # Find real CA
         t_closest = (df_spacecraft - df_asteroid)[['x', 'y', 'z']].apply(np.linalg.norm, axis=1).idxmin()
@@ -57,24 +62,32 @@ def generate_data(mass, obs_init, ast_init, v, b_sat, alpha, beta, t_ca, verbose
     df_observer = relative_time_index(df_observer, t_start)
     df_asteroid = relative_time_index(df_asteroid, t_start)
     df_spacecraft = relative_time_index(df_spacecraft, t_start)
+    df_cubesat = relative_time_index(df_cubesat, t_start)
 
     if verbose:
         # plot trajectory
         fig0 = go.Figure(layout={'scene': {'aspectmode': 'data'}})
         plot_trajectory(df_asteroid, 'asteroid', fig0)
         plot_trajectory(df_spacecraft, 'spacecraft', fig0)
+        plot_trajectory(df_cubesat, 'cubesat', fig0)
         fig0.show()
 
     # measurements
     delay_earth, freq_earth = measurements(
         df_spacecraft, df_observer, f0=f0,
-        delay_noise=delay_noise, freq_noise=freq_noise
+        win_size=int(int_time / dt), delay_noise=delay_noise, freq_noise=freq_noise
     )
+    delay_cubesat, freq_cubesat = measurements(
+        df_cubesat, df_spacecraft, f0=f0,
+        win_size=int(int_time / dt), delay_noise=delay_noise, freq_noise=freq_noise
+    )
+
     sat_init = np.concatenate((sat_pos_init, sat_vel_ca))
-    return (delay_earth, freq_earth), sat_init
+    cub_init = np.concatenate((cub_pos_init, sat_vel_ca))
+    return (delay_earth, freq_earth, delay_cubesat, freq_cubesat), (sat_init, cub_init)
 
 
-def generate_model(mass, obs_init, ast_init, sat_init):
+def generate_model(mass, obs_init, ast_init, sat_init, cub_init):
     mu = G * mass  # m3/s2
 
     # propagation
@@ -82,27 +95,31 @@ def generate_model(mass, obs_init, ast_init, sat_init):
     ast_name, df_asteroid = docks('asteroid', t_start, t_end, dt, *np.split(ast_init, 2))
     _, df_spacecraft = docks('spacecraft', t_start, t_end, dt, *np.split(sat_init, 2),
                              asteroid_name=ast_name, asteroid_mu=mu)
+    _, df_cubesat = docks('cubesat', t_start, t_end, dt, *np.split(cub_init, 2),
+                          asteroid_name=ast_name, asteroid_mu=mu)
 
     df_observer = relative_time_index(df_observer, t_start)
     df_spacecraft = relative_time_index(df_spacecraft, t_start)
+    df_cubesat = relative_time_index(df_cubesat, t_start)
 
     # measurements
-    delay_earth, freq_earth = measurements(df_spacecraft, df_observer, f0=f0)
+    delay_earth, freq_earth = measurements(df_spacecraft, df_observer, f0=f0, win_size=int(int_time / dt))
+    delay_cubesat, freq_cubesat = measurements(df_cubesat, df_spacecraft, f0=f0, win_size=int(int_time / dt))
 
-    return delay_earth, freq_earth
+    return delay_earth, freq_earth, delay_cubesat, freq_cubesat
 
 
 if __name__ == '__main__':
     obs = np.array((4.6E+10, -1.4E+11, 5.3E+06, 2.8E+04, 9.1E+03, -2.5E-01))
     ast = np.array((-4.0E+11, -6.5E+10, 2.1E+10, 4.6E+03, -1.6E+04, -3.8E+02))
 
-    (delay_data, freq_data), sat = generate_data(
+    (delay_data, freq_data, _, _), (sat, cub) = generate_data(
         mass=1.7e18, obs_init=obs, ast_init=ast,
-        v=15e3, b_sat=3000e3, alpha=170. * pi / 180., beta=3. * pi / 180.,
+        v=15e3, b_sat=300e3, b_cub=100e3, alpha=170. * pi / 180., beta=3. * pi / 180.,
         t_ca=pd.to_datetime('2010-07-10 15:46:04'), verbose=False
     )
 
-    delay_ref, freq_ref = generate_model(0., obs, ast, sat)
+    delay_ref, freq_ref, _, _ = generate_model(0., obs, ast, sat, cub)
     y_delay = (delay_data - delay_ref).to_numpy()
     minmax_delay = min(y_delay), max(y_delay)
     y_freq = (freq_data - freq_ref).to_numpy()
@@ -113,20 +130,20 @@ if __name__ == '__main__':
     color = next_color()
     fig.add_scatter(x=delay_ref.index, y=y_delay, name='data',
                     col=1, row=1, mode='markers', marker={'symbol': 'cross', 'color': color})
-    fig.add_scatter(x=freq_ref.index, y=y_freq, name='data', showlegend=False,
+    fig.add_scatter(x=freq_ref.index, y=y_freq, name='data',
                     col=1, row=2, mode='markers', marker={'symbol': 'cross', 'color': color})
 
 
     def wrapper(_, mass):
         print('Called with m = {}'.format(mass))
-        delay_model, freq_model = generate_model(float(mass), obs, ast, sat)
+        delay_model, freq_model, _, _ = generate_model(float(mass), obs, ast, sat, cub)
         x_delay = (delay_model - delay_ref).to_numpy()
         x_freq = (freq_model - freq_ref).to_numpy()
         x = np.concatenate((normalize(x_delay, *minmax_delay), normalize(x_freq, *minmax_freq)))
         plot_color = next_color()
         fig.add_scatter(x=delay_ref.index, y=x_delay, name='mass {}'.format(mass),
                         col=1, row=1, mode='lines', line={'color': plot_color})
-        fig.add_scatter(x=freq_ref.index, y=x_freq, name='mass {}'.format(mass), showlegend=False,
+        fig.add_scatter(x=freq_ref.index, y=x_freq, name='mass {}'.format(mass),
                         col=1, row=2, mode='lines', line={'color': plot_color})
         return x
 
