@@ -33,7 +33,7 @@ def datetime_to_mjd2(datetime):
     return delta.days, delta.seconds
 
 
-def measurements(probe, observer, f0, win_size=None):
+def measurements(probe, observer, f0, win_size=None, delay_noise=None, freq_noise=None):
     if not probe.index.equals(observer.index):
         raise ValueError('Indexes of probe and observer mismatch')
 
@@ -50,8 +50,21 @@ def measurements(probe, observer, f0, win_size=None):
         time_delay = time_delay.rolling(win_size + (win_size % 2 == 0), center=True).mean().dropna().iloc[::win_size]
         frequency = frequency.rolling(win_size + (win_size % 2 == 0), center=True).mean().dropna().iloc[::win_size]
 
+    if delay_noise is not None:
+        time_delay += np.random.normal(scale=delay_noise, size=len(time_delay))
+    if freq_noise is not None:
+        frequency += np.random.normal(scale=freq_noise, size=len(frequency))
+
     return time_delay, frequency
 
 
 def next_color():
     return next(color_iterator)
+
+
+def normalize(d, from_min, from_max):
+    return (d - from_min) / (from_max - from_min)
+
+
+def inv_normalize(d, to_min, to_max):
+    return d * (to_max - to_min) + to_min
