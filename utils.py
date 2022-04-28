@@ -1,8 +1,11 @@
+import itertools
+
 import numpy as np
 import pandas as pd
+from plotly.colors import DEFAULT_PLOTLY_COLORS
 from scipy.spatial.transform import Rotation
 
-
+color_iterator = itertools.cycle(DEFAULT_PLOTLY_COLORS)
 TIME_ORIGIN = pd.to_datetime('1858-11-17')
 c = 3e8  # m/s
 
@@ -48,3 +51,7 @@ def measurements(probe, observer, f0, win_size=None):
         frequency = frequency.rolling(win_size + (win_size % 2 == 0), center=True).mean().dropna().iloc[::win_size]
 
     return time_delay, frequency
+
+
+def next_color():
+    return next(color_iterator)
