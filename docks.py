@@ -1,5 +1,6 @@
 import filecmp
 import os
+import subprocess
 
 import numpy as np
 import pandas as pd
@@ -9,13 +10,13 @@ from ruamel.yaml import YAML
 from flyby_utils import close_approach_calculator
 from utils import mjd2_to_datetime, datetime_to_mjd2
 
-
 LOCAL_DISK = '/local_disk'
 DOCKS_DIR = os.path.join(LOCAL_DISK, 'pphan/DOCKS')
 DOCKS_ENV = os.path.join(LOCAL_DISK, 'pphan/envs/docks/bin/python')
 
 
-def docks(name, t_start, t_end, dt, init_pos, init_vel, asteroid_name=None, asteroid_mu=None):
+def docks(name, t_start, t_end, dt, init_pos, init_vel,
+          asteroid_name=None, asteroid_mu=None, verbose=0):
     if isinstance(t_start, str):
         t_start = pd.to_datetime(t_start)
     if isinstance(t_end, str):
@@ -35,12 +36,18 @@ def docks(name, t_start, t_end, dt, init_pos, init_vel, asteroid_name=None, aste
             os.remove(os.path.join(work_dir, 'init.txt'))
             os.remove(os.path.join(work_dir, 'config.yaml'))
             os.removedirs(work_dir)
-            print('Using already existing dir {}'.format(test_dir))
+            if verbose >= 1:
+                print('Using already existing dir {}'.format(test_dir))
             return os.path.basename(test_dir), docks_parser(os.path.join(test_dir, 'traj.txt'))
 
     # Else create new trajectory
-    print('Creating new dir {}'.format(work_dir))
-    os.system(' '.join((DOCKS_ENV, os.path.join(DOCKS_DIR, 'Propagator/propagator.py'), os.path.join(work_dir, 'config.yaml'))))
+    if verbose >= 1:
+        print('Creating new dir {}'.format(work_dir))
+
+    subprocess.run(
+        (DOCKS_ENV, os.path.join(DOCKS_DIR, 'Propagator/propagator.py'), os.path.join(work_dir, 'config.yaml')),
+        stdout=subprocess.DEVNULL if verbose < 1 else None
+    )
     return os.path.basename(work_dir), docks_parser(os.path.join(work_dir, 'traj.txt'))
 
 
