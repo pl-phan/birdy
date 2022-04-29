@@ -46,7 +46,7 @@ def docks(name, t_start, t_end, dt, init_pos, init_vel,
 
     subprocess.run(
         (DOCKS_ENV, os.path.join(DOCKS_DIR, 'Propagator/propagator.py'), os.path.join(work_dir, 'config.yaml')),
-        stdout=subprocess.DEVNULL if verbose < 1 else None
+        stdout=subprocess.DEVNULL if verbose < 1 else None, stderr=subprocess.STDOUT
     )
     return os.path.basename(work_dir), docks_parser(os.path.join(work_dir, 'traj.txt'))
 
