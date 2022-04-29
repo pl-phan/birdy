@@ -1,20 +1,22 @@
+import itertools
+
 import numpy as np
 import pandas as pd
+from plotly.colors import DEFAULT_PLOTLY_COLORS
 from scipy.spatial.transform import Rotation
 
-
+color_iterator = itertools.cycle(DEFAULT_PLOTLY_COLORS)
 TIME_ORIGIN = pd.to_datetime('1858-11-17')
 c = 3e8  # m/s
 
 
-def orthogonal(i, random=False):
+def random_orthogonal(i, rng=None):
     """
     Returns a 3D vector orthogonal to i
     """
-    k = np.array((1., 0., 0.))
-    if random:
-        k = Rotation.random().apply(k)
-
+    if not rng:
+        rng = np.random.default_rng()
+    k = Rotation.random(random_state=rng).apply(np.array((1., 0., 0.)))
     j = np.cross(i, k)
     return j / np.linalg.norm(j)
 
@@ -30,7 +32,7 @@ def datetime_to_mjd2(datetime):
     return delta.days, delta.seconds
 
 
-def measurements(probe, observer, f0, win_size=None):
+def measurements(probe, observer, f0, win_size=None, delay_noise=None, freq_noise=None, rng=None):
     if not probe.index.equals(observer.index):
         raise ValueError('Indexes of probe and observer mismatch')
 
@@ -43,8 +45,33 @@ def measurements(probe, observer, f0, win_size=None):
     v_r = (df_relative.vx * df_relative.x + df_relative.vy * df_relative.y + df_relative.vz * df_relative.z) / rho
     frequency = f0 * (1. - 2. * v_r / c)
 
-    if win_size is not None:
+    if win_size:
         time_delay = time_delay.rolling(win_size + (win_size % 2 == 0), center=True).mean().dropna().iloc[::win_size]
         frequency = frequency.rolling(win_size + (win_size % 2 == 0), center=True).mean().dropna().iloc[::win_size]
 
+    if delay_noise or freq_noise:
+        if not rng:
+            rng = np.random.default_rng()
+        if delay_noise:
+            time_delay += rng.normal(scale=delay_noise, size=len(time_delay))
+        if freq_noise:
+            frequency += rng.normal(scale=freq_noise, size=len(frequency))
+
     return time_delay, frequency
+
+
+def next_color():
+    return next(color_iterator)
+
+
+def normalize(d, from_min, from_max):
+    return (d - from_min) / (from_max - from_min)
+
+
+def inv_normalize(d, to_min, to_max):
+    return d * (to_max - to_min) + to_min
+
+
+if __name__ == '__main__':
+    # TODO TESTS
+    pass
