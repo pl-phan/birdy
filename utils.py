@@ -10,14 +10,13 @@ TIME_ORIGIN = pd.to_datetime('1858-11-17')
 c = 3e8  # m/s
 
 
-def orthogonal(i, random=False):
+def random_orthogonal(i, rng=None):
     """
     Returns a 3D vector orthogonal to i
     """
-    k = np.array((1., 0., 0.))
-    if random:
-        k = Rotation.random().apply(k)
-
+    if not rng:
+        rng = np.random.default_rng()
+    k = Rotation.random(random_state=rng).apply(np.array((1., 0., 0.)))
     j = np.cross(i, k)
     return j / np.linalg.norm(j)
 
@@ -71,3 +70,8 @@ def normalize(d, from_min, from_max):
 
 def inv_normalize(d, to_min, to_max):
     return d * (to_max - to_min) + to_min
+
+
+if __name__ == '__main__':
+    # TODO TESTS
+    pass
