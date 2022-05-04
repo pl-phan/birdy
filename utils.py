@@ -64,14 +64,6 @@ def next_color():
     return next(color_iterator)
 
 
-def normalize(d, from_min, from_max):
-    return (d - from_min) / (from_max - from_min)
-
-
-def inv_normalize(d, to_min, to_max):
-    return d * (to_max - to_min) + to_min
-
-
 if __name__ == '__main__':
     # TODO TESTS
     pass
