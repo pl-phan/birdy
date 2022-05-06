@@ -64,6 +64,23 @@ def next_color():
     return next(color_iterator)
 
 
+def find_sh_coef(harmonics, degree, order, sign):
+    if order > degree:
+        raise ValueError('order {:d} is larger than degree {:d}'.format(order, degree))
+    if sign not in ('c', 's'):
+        raise ValueError('sign must be \'c\' or \'s\', but \'{}\' was provided'.format(sign))
+    if (order == 0) and (sign != 'c'):
+        raise ValueError('sign must be \'c\' when order is 0, but \'{}\' was provided'.format(sign))
+
+    if degree not in harmonics:
+        return 0.
+    if order not in harmonics[degree]:
+        return 0.
+    if sign not in harmonics[degree][order]:
+        return 0.
+    return harmonics[degree][order][sign]
+
+
 if __name__ == '__main__':
     # TODO TESTS
     pass

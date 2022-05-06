@@ -6,7 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from ruamel.yaml import YAML
 
-from utils import mjd2_to_datetime, datetime_to_mjd2
+from utils import mjd2_to_datetime, datetime_to_mjd2, find_sh_coef
 
 LOCAL_DISK = '/local_disk'
 DOCKS_DIR = os.path.join(LOCAL_DISK, 'pphan/DOCKS')
@@ -14,21 +14,22 @@ DOCKS_ENV = os.path.join(LOCAL_DISK, 'pphan/envs/docks/bin/python')
 
 
 def docks(name, t_start, t_end, dt, init_pos, init_vel,
-          asteroid_name=None, asteroid_mu=None, verbose=0):
+          ast_name=None, ast_mu=None, ast_radius=None, ast_harmonics=None, verbose=0):
 
+    test_files = ('init.txt', 'config.yaml', 'ast_harmonics.tab')
     test_dirs = [os.path.join(DOCKS_DIR, 'bodies', name)
                  for name in os.listdir(os.path.join(DOCKS_DIR, 'bodies'))
                  if name.startswith(name)]
-    work_dir = config_writer(name, t_start, t_end, dt, init_pos, init_vel, asteroid_name, asteroid_mu)
+    work_dir = config_writer(name, t_start, t_end, dt, init_pos, init_vel, ast_name, ast_mu, ast_radius, ast_harmonics)
 
     for test_dir in test_dirs:
         # Compare files, see https://docs.python.org/3/library/filecmp.html#filecmp.cmpfiles
-        if len(filecmp.cmpfiles(test_dir, work_dir, ('init.txt', 'config.yaml'))[0]) == 2:
+        if len(filecmp.cmpfiles(test_dir, work_dir, test_files)[0]) == len(test_files):
             if not os.path.isfile(os.path.join(test_dir, 'traj.txt')):
                 continue
             # Trajectory already exists
-            os.remove(os.path.join(work_dir, 'init.txt'))
-            os.remove(os.path.join(work_dir, 'config.yaml'))
+            for test_file in test_files:
+                os.remove(os.path.join(work_dir, test_file))
             os.removedirs(work_dir)
             if verbose >= 1:
                 print('Using already existing dir {}'.format(test_dir))
@@ -45,14 +46,33 @@ def docks(name, t_start, t_end, dt, init_pos, init_vel,
     return os.path.basename(work_dir), docks_parser(os.path.join(work_dir, 'traj.txt'))
 
 
-def config_writer(name, t_start, t_end, dt, init_pos, init_vel, asteroid_name=None, asteroid_mu=None):
+def config_writer(name, t_start, t_end, dt, init_pos, init_vel,
+                  ast_name=None, ast_mu=None, ast_radius=None, ast_harmonics=None):
     work_dir = os.path.join(DOCKS_DIR, 'bodies', '{}_{}'.format(name, pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')))
+    os.makedirs(work_dir, exist_ok=True)
+
+    # spherical harmonics file
+    harmonics_txt = ''
+    if ast_harmonics is not None:
+        deg_max = max(ast_harmonics)
+        harmonics_txt += '{:.17E}, {:.17E}, 0.0, {:d}, {:d}, 1, 0.0, 0.0\n'.format(
+            ast_radius / 1e3, ast_mu / 1e9, deg_max, deg_max)
+
+        for l_deg in range(1, deg_max + 1):
+            harmonics_txt += '{:d}, 0, {:.17E}, 0.0\n'.format(l_deg, find_sh_coef(ast_harmonics, l_deg, 0, 'c'))
+            for m_ord in range(1, l_deg + 1):
+                harmonics_txt += '{:d}, {:d}, {:.17E}, {:.17E}\n'.format(
+                    l_deg, m_ord,
+                    find_sh_coef(ast_harmonics, l_deg, m_ord, 'c'),
+                    find_sh_coef(ast_harmonics, l_deg, m_ord, 's')
+                )
+    with open(os.path.join(work_dir, 'ast_harmonics.tab'), 'w') as f:
+        f.write(harmonics_txt)
 
     # Initial conditions file
     init_txt = '{:d}    {:.3f}    {:.17E}    {:.17E}    {:.17E}    {:.17E}    {:.17E}    {:.17E}\n'.format(
         *datetime_to_mjd2(t_start), *(init_pos / 1e3), *(init_vel / 1e3)
     )
-    os.makedirs(work_dir, exist_ok=True)
     with open(os.path.join(work_dir, 'init.txt'), 'w') as f:
         f.write(init_txt)
 
@@ -66,11 +86,21 @@ def config_writer(name, t_start, t_end, dt, init_pos, init_vel, asteroid_name=No
         duration.hours, duration.minutes, duration.seconds
     )
     config['timeSettings']['time_step'][0] = dt
-    if asteroid_name is not None:
-        config['perturbations']['new_bodies_added'] = True
-        config['new_grav_bodies']['body1']['name'] = asteroid_name
-        config['new_grav_bodies']['body1']['mu'] = '{:.17E}'.format(asteroid_mu)
-        config['new_grav_bodies']['body1']['ephFile'] = os.path.join('../', asteroid_name, 'traj.txt')
+
+    if ast_name is not None:
+        if ast_harmonics is None:
+            config['perturbations']['new_bodies_added'] = True
+            config['new_grav_bodies']['body1']['name'] = ast_name
+            config['new_grav_bodies']['body1']['mu'] = '{:.17E}'.format(ast_mu)
+            config['new_grav_bodies']['body1']['ephFile'] = os.path.join('../', ast_name, 'traj.txt')
+        else:
+            config['perturbations']['complex_grav_model_activated'] = True
+            config['complex_grav_model_activated']['body1']['name'] = ast_name
+            config['complex_grav_model_activated']['body1']['ephFile'] = os.path.join('../', ast_name, 'traj.txt')
+            config['complex_grav_model_activated']['body1']['rotMatrixFile'] = '../lutetia_rotation_matrix.txt'
+            config['complex_grav_model_activated']['body1']['sphCoeffFile'] = 'ast_harmonics.tab'
+            config['complex_grav_model_activated']['body1']['sphHarmDegree'] = max(ast_harmonics)
+
     with open(os.path.join(work_dir, 'config.yaml'), 'w') as f:
         yaml.dump(config, f)
 
