@@ -20,8 +20,8 @@ t_start = pd.to_datetime('2010-07-10 11:45:00')
 t_end = pd.to_datetime('2010-07-10 21:45:00')
 dt = 30.
 int_time = 60.  # s
-delay_noise = 4e-7  # s
-freq_noise = 1e-1  # Hz
+delay_noise = 4e-8  # s
+freq_noise = 1e-2  # Hz
 
 
 def generate_data(mass, earth_init, ast_init, v, b_sat, b_cub, alpha, beta, t_ca, mode='cubesat', verbose=0):
@@ -87,12 +87,12 @@ def generate_model(mass, earth_init, ast_init, sat_init, cub_init, mode='cubesat
     if mode == 'earth':
         _, df_observer = docks('earth', t_start, t_end, dt, *np.split(earth_init, 2), verbose=verbose)
         _, df_probe = docks('spacecraft', t_start, t_end, dt, *np.split(sat_init, 2),
-                            asteroid_name=ast_name, asteroid_mu=mu, verbose=verbose)
+                            ast_name=ast_name, ast_mu=mu, verbose=verbose)
     elif mode == 'cubesat':
         _, df_observer = docks('spacecraft', t_start, t_end, dt, *np.split(sat_init, 2),
-                               asteroid_name=ast_name, asteroid_mu=mu, verbose=verbose)
+                               ast_name=ast_name, ast_mu=mu, verbose=verbose)
         _, df_probe = docks('cubesat', t_start, t_end, dt, *np.split(cub_init, 2),
-                            asteroid_name=ast_name, asteroid_mu=mu, verbose=verbose)
+                            ast_name=ast_name, ast_mu=mu, verbose=verbose)
     else:
         raise NotImplementedError('available measurement modes : earth or cubesat')
 
@@ -111,7 +111,7 @@ if __name__ == '__main__':
 
     # data generation with noise
     (delay_data, freq_data), (sat, cub) = generate_data(
-        mass=15e17, earth_init=earth, ast_init=ast,
+        mass=1.7e18, earth_init=earth, ast_init=ast,
         v=15e3, b_sat=3000e3, b_cub=300e3, alpha=170. * pi / 180., beta=3. * pi / 180.,
         t_ca=pd.to_datetime('2010-07-10 15:46:04'), mode=MODE, verbose=VERBOSE
     )
@@ -132,6 +132,8 @@ if __name__ == '__main__':
                         col=1, row=1, mode='lines', line={'color': plot_color})
         fig.add_scatter(x=freq_model.index, y=freq_model, name='mass {}'.format(mass),
                         col=1, row=2, mode='lines', line={'color': plot_color})
+        # return (delay_model.to_numpy() - delay_data.to_numpy()) / delay_uncertainty
+        # return (freq_model.to_numpy() - freq_data.to_numpy()) / freq_uncertainty
         return (x - y) / sigmas
 
 
@@ -142,10 +144,15 @@ if __name__ == '__main__':
     fig.add_scatter(x=freq_data.index, y=freq_data, name='data', col=1, row=2,
                     mode='markers', marker={'symbol': 'cross', 'color': color})
 
-    beta0 = np.array((1e18,))
-    results = least_squares(residuals, x0=beta0, diff_step=1e-5, ftol=1e-6, xtol=1e-5, gtol=float('nan'))
+    beta0 = np.array((2e18,))
+    results = least_squares(residuals, x0=beta0, diff_step=5e-5, ftol=1e-6, xtol=5e-5, gtol=float('nan'))
     popt, cov = results.x, np.linalg.inv(results.jac.T @ results.jac)
+    sigmas_ = cov.diagonal() ** 0.5
 
-    print('Fit parameters:', popt)
-    print('sigmas:', 100. * cov.diagonal() ** 0.5 / popt)
+    mass_ = popt[0]
+    sigma_ = sigmas_[0]
+
+    print('mass: {:.7E} kg'.format(mass_))
+    print('sigmas: {:.4f} %'.format(100. * sigma_ / mass_))
+    print('[{:.7E} --> {:.7E} kg]'.format(mass_ - 2. * sigma_, mass_ + 2. * sigma_))
     fig.show()
