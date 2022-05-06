@@ -6,13 +6,16 @@ from scipy.optimize import least_squares
 
 from docks import docks, plot_trajectories
 from flyby_utils import shift_pos, params_to_coords, print_flyby
-from utils import measurements, next_color
+from utils import measurements, next_color, show_covariance
 
 # seed
 RNG = np.random.default_rng(19960319)
 
 # physics parameters
 G = 6.6743e-11  # m3/kg/s2
+
+# asteroid radius
+radius = 49e3  # m
 
 # observation parameters
 f0 = 8.4e9  # Hz
@@ -21,10 +24,11 @@ t_end = pd.to_datetime('2010-07-10 21:45:00')
 dt = 30.
 int_time = 60.  # s
 delay_noise = 4e-8  # s
-freq_noise = 1e-2  # Hz
+freq_noise = 1e-1  # Hz
 
 
-def generate_data(mass, earth_init, ast_init, v, b_sat, b_cub, alpha, beta, t_ca, mode='cubesat', verbose=0):
+def generate_data(mass, earth_init, ast_init, v, b_sat, b_cub, alpha, beta, t_ca,
+                  ast_harmonics=None, mode='cubesat', verbose=0):
     # flyby parameters
     mu = G * mass  # m3/s2
 
@@ -47,10 +51,11 @@ def generate_data(mass, earth_init, ast_init, v, b_sat, b_cub, alpha, beta, t_ca
     # probe and cubesat : find init state vectors and propagate
     sat_pos_init = shift_pos(sat_pos_ca, sat_vel_ca, t_from=t_ca, t_to=t_start)
     cub_pos_init = shift_pos(cub_pos_ca, sat_vel_ca, t_from=t_ca, t_to=t_start)
-    _, df_spacecraft = docks('spacecraft', t_start, t_end, dt, sat_pos_init, sat_vel_ca, ast_name, mu, verbose=verbose)
-    df_cubesat = None
-    if mode == 'cubesat':
-        _, df_cubesat = docks('cubesat', t_start, t_end, dt, cub_pos_init, sat_vel_ca, ast_name, mu, verbose=verbose)
+    _, df_spacecraft = docks('spacecraft', t_start, t_end, dt, sat_pos_init, sat_vel_ca,
+                             ast_name, mu, radius, ast_harmonics, verbose=verbose)
+    df_cubesat = docks('cubesat', t_start, t_end, dt, cub_pos_init, sat_vel_ca,
+                       ast_name, mu, radius, ast_harmonics, verbose=verbose
+                       )[1] if (mode == 'cubesat') else None
 
     if verbose >= 1:
         print_flyby(df_spacecraft, df_asteroid, df_earth)
@@ -77,7 +82,8 @@ def generate_data(mass, earth_init, ast_init, v, b_sat, b_cub, alpha, beta, t_ca
     return (delay, freq), (sat_init, cub_init)
 
 
-def generate_model(mass, earth_init, ast_init, sat_init, cub_init, mode='cubesat', verbose=0):
+def generate_model(mass, earth_init, ast_init, sat_init, cub_init,
+                   ast_harmonics=None, mode='cubesat', verbose=0):
     mu = G * mass  # m3/s2
 
     # asteroid propagation
@@ -87,12 +93,12 @@ def generate_model(mass, earth_init, ast_init, sat_init, cub_init, mode='cubesat
     if mode == 'earth':
         _, df_observer = docks('earth', t_start, t_end, dt, *np.split(earth_init, 2), verbose=verbose)
         _, df_probe = docks('spacecraft', t_start, t_end, dt, *np.split(sat_init, 2),
-                            ast_name=ast_name, ast_mu=mu, verbose=verbose)
+                            ast_name, mu, radius, ast_harmonics, verbose=verbose)
     elif mode == 'cubesat':
         _, df_observer = docks('spacecraft', t_start, t_end, dt, *np.split(sat_init, 2),
-                               ast_name=ast_name, ast_mu=mu, verbose=verbose)
+                               ast_name, mu, radius, ast_harmonics, verbose=verbose)
         _, df_probe = docks('cubesat', t_start, t_end, dt, *np.split(cub_init, 2),
-                            ast_name=ast_name, ast_mu=mu, verbose=verbose)
+                            ast_name, mu, radius, ast_harmonics, verbose=verbose)
     else:
         raise NotImplementedError('available measurement modes : earth or cubesat')
 
@@ -108,12 +114,14 @@ if __name__ == '__main__':
 
     earth = np.array((4.6E+10, -1.4E+11, 5.3E+06, 2.8E+04, 9.1E+03, -2.5E-01))
     ast = np.array((-4.0E+11, -6.5E+10, 2.1E+10, 4.6E+03, -1.6E+04, -3.8E+02))
+    ast_mass = 1.7e18
+    ast_sh = {2: {0: {'c': -1.2e-2}, 2: {'c': 2.5e-4, 's': -2.7e-4}}}
 
     # data generation with noise
     (delay_data, freq_data), (sat, cub) = generate_data(
-        mass=1.7e18, earth_init=earth, ast_init=ast,
-        v=15e3, b_sat=3000e3, b_cub=300e3, alpha=170. * pi / 180., beta=3. * pi / 180.,
-        t_ca=pd.to_datetime('2010-07-10 15:46:04'), mode=MODE, verbose=VERBOSE
+        mass=ast_mass, earth_init=earth, ast_init=ast, v=1000., b_sat=3000e3, b_cub=100e3,
+        alpha=170. * pi / 180., beta=3. * pi / 180., ast_harmonics=ast_sh,
+        t_ca=pd.to_datetime('2010-07-10 16:45:00'), mode=MODE, verbose=VERBOSE
     )
     y = np.concatenate((delay_data.to_numpy(), freq_data.to_numpy()))
     delay_uncertainty = delay_noise
@@ -122,15 +130,16 @@ if __name__ == '__main__':
 
 
     def residuals(beta):
-        mass, = beta
-        print("Evaluating at m={}".format(mass))
-        delay_model, freq_model = generate_model(mass, earth, ast, sat, cub, mode=MODE, verbose=VERBOSE)
+        mass, c20, c22 = beta
+        ast_harmonics = {2: {0: {'c': c20}, 2: {'c': c22, 's': -2.7e-4}}}
+        print("Evaluating at {}".format(beta))
+        delay_model, freq_model = generate_model(mass, earth, ast, sat, cub, ast_harmonics, mode=MODE, verbose=VERBOSE)
         x = np.concatenate((delay_model.to_numpy(), freq_model.to_numpy()))
 
         plot_color = next_color()
-        fig.add_scatter(x=delay_model.index, y=delay_model, name='mass {}'.format(mass),
+        fig.add_scatter(x=delay_model.index, y=delay_model, name=str(beta),
                         col=1, row=1, mode='lines', line={'color': plot_color})
-        fig.add_scatter(x=freq_model.index, y=freq_model, name='mass {}'.format(mass),
+        fig.add_scatter(x=freq_model.index, y=freq_model, name=str(beta),
                         col=1, row=2, mode='lines', line={'color': plot_color})
         # return (delay_model.to_numpy() - delay_data.to_numpy()) / delay_uncertainty
         # return (freq_model.to_numpy() - freq_data.to_numpy()) / freq_uncertainty
@@ -144,15 +153,17 @@ if __name__ == '__main__':
     fig.add_scatter(x=freq_data.index, y=freq_data, name='data', col=1, row=2,
                     mode='markers', marker={'symbol': 'cross', 'color': color})
 
-    beta0 = np.array((2e18,))
-    results = least_squares(residuals, x0=beta0, diff_step=5e-5, ftol=1e-6, xtol=5e-5, gtol=float('nan'))
+    beta0 = np.array((1.5e18, -1e-2, 3e-4))
+    results = least_squares(residuals, x0=beta0, diff_step=5e-5, x_scale=(1e18, 1e-2, 1e-4),
+                            ftol=1e-6, xtol=5e-5, gtol=float('nan'))
     popt, cov = results.x, np.linalg.inv(results.jac.T @ results.jac)
-    sigmas_ = cov.diagonal() ** 0.5
 
-    mass_ = popt[0]
-    sigma_ = sigmas_[0]
+    p_sigmas = cov.diagonal() ** 0.5
 
-    print('mass: {:.7E} kg'.format(mass_))
-    print('sigmas: {:.4f} %'.format(100. * sigma_ / mass_))
-    print('[{:.7E} --> {:.7E} kg]'.format(mass_ - 2. * sigma_, mass_ + 2. * sigma_))
+    print('solution: ' + ', '.join(('{:.7E}'.format(p) for p in popt)))
+    print('sigmas: ' + ', '.join(('{:.4f} %'.format(100. * s / abs(p)) for p, s in zip(popt, p_sigmas))))
+    for p, s in zip(popt, p_sigmas):
+        print('[{:.7E} --> {:.7E}]'.format(p - 2. * s, p + 2. * s))
     fig.show()
+
+    show_covariance(popt, cov, ('mass', 'c20', 'c22'), true_values=(1.7e18, -1.2e-2, 2.5e-4))

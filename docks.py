@@ -53,7 +53,7 @@ def config_writer(name, t_start, t_end, dt, init_pos, init_vel,
 
     # spherical harmonics file
     harmonics_txt = ''
-    if ast_harmonics is not None:
+    if ast_harmonics:
         deg_max = max(ast_harmonics)
         harmonics_txt += '{:.17E}, {:.17E}, 0.0, {:d}, {:d}, 1, 0.0, 0.0\n'.format(
             ast_radius / 1e3, ast_mu / 1e9, deg_max, deg_max)
@@ -87,19 +87,19 @@ def config_writer(name, t_start, t_end, dt, init_pos, init_vel,
     )
     config['timeSettings']['time_step'][0] = dt
 
-    if ast_name is not None:
-        if ast_harmonics is None:
+    if ast_name:
+        if ast_harmonics:
+            config['perturbations']['complex_grav_model_activated'] = True
+            config['complex_grav_bodies']['body1']['name'] = ast_name
+            config['complex_grav_bodies']['body1']['ephFile'] = os.path.join('../', ast_name, 'traj.txt')
+            config['complex_grav_bodies']['body1']['rotMatrixFile'] = '../lutetia_rotation_matrix.txt'
+            config['complex_grav_bodies']['body1']['sphCoeffFile'] = 'ast_harmonics.tab'
+            config['complex_grav_bodies']['body1']['sphHarmDegree'] = max(ast_harmonics)
+        else:
             config['perturbations']['new_bodies_added'] = True
             config['new_grav_bodies']['body1']['name'] = ast_name
             config['new_grav_bodies']['body1']['mu'] = '{:.17E}'.format(ast_mu)
             config['new_grav_bodies']['body1']['ephFile'] = os.path.join('../', ast_name, 'traj.txt')
-        else:
-            config['perturbations']['complex_grav_model_activated'] = True
-            config['complex_grav_model_activated']['body1']['name'] = ast_name
-            config['complex_grav_model_activated']['body1']['ephFile'] = os.path.join('../', ast_name, 'traj.txt')
-            config['complex_grav_model_activated']['body1']['rotMatrixFile'] = '../lutetia_rotation_matrix.txt'
-            config['complex_grav_model_activated']['body1']['sphCoeffFile'] = 'ast_harmonics.tab'
-            config['complex_grav_model_activated']['body1']['sphHarmDegree'] = max(ast_harmonics)
 
     with open(os.path.join(work_dir, 'config.yaml'), 'w') as f:
         yaml.dump(config, f)

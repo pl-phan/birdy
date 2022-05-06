@@ -11,9 +11,9 @@ def shift_pos(pos, vel, delta_t=None, t_from=None, t_to=None):
     Shifts position along a linear trajectory
     """
     # Check inputs
-    if delta_t is None and (t_from is None or t_to is None):
+    if not (delta_t or (t_from and t_to)):
         raise ValueError('Either delta_t or the time limits must be specified')
-    if delta_t is None:
+    if not delta_t:
         delta_t = (t_to - t_from) / pd.to_timedelta(1, 's')
     # Update position
     new_pos = pos + vel * delta_t

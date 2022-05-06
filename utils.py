@@ -3,6 +3,7 @@ import itertools
 import numpy as np
 import pandas as pd
 from plotly.colors import DEFAULT_PLOTLY_COLORS
+from plotly.subplots import make_subplots
 from scipy.spatial.transform import Rotation
 
 color_iterator = itertools.cycle(DEFAULT_PLOTLY_COLORS)
@@ -81,6 +82,35 @@ def find_sh_coef(harmonics, degree, order, sign):
     return harmonics[degree][order][sign]
 
 
+def show_covariance(mu, cov, names, true_values=None, rng=None):
+    if not rng:
+        rng = np.random.default_rng()
+
+    n = len(mu)
+    samples = rng.multivariate_normal(mean=mu, cov=cov, size=100000)
+    fig = make_subplots(rows=n, cols=n, subplot_titles=['{}, {}'.format(*k) for k in itertools.product(names, names)])
+    for i in range(n):
+        for j in range(n):
+            if i == j:
+                fig.add_histogram(x=samples[:, i], col=i + 1, row=j + 1,
+                                  marker={'color': 'black'})
+            else:
+                fig.add_histogram2d(x=samples[:, i], y=samples[:, j], col=i + 1, row=j + 1,
+                                    coloraxis='coloraxis')
+    if true_values:
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    fig.add_vline(x=true_values[i], col=i + 1, row=j + 1,
+                                  line={'color': 'green'})
+                else:
+                    fig.add_scatter(x=true_values[i:i+1], y=true_values[j:j+1], col=i + 1, row=j + 1,
+                                    marker={'color': 'green', 'symbol': 'cross'})
+    fig.update_layout(showlegend=False, coloraxis=dict(colorscale='greys'))
+    fig.update_coloraxes(showscale=False)
+    fig.show()
+
+
 if __name__ == '__main__':
     # TODO TESTS
-    pass
+    show_covariance((100., 5.), ((3., -1.5), (-1.5, 1.)), names=('p1', 'p2'))
