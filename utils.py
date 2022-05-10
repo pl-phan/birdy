@@ -1,4 +1,5 @@
 import itertools
+from collections import namedtuple
 
 import numpy as np
 import pandas as pd
@@ -8,6 +9,7 @@ from scipy.spatial.transform import Rotation
 
 color_iterator = itertools.cycle(DEFAULT_PLOTLY_COLORS)
 TIME_ORIGIN = pd.to_datetime('1858-11-17')
+Results = namedtuple('Results', 'x jac')
 c = 3e8  # m/s
 
 
@@ -80,6 +82,15 @@ def find_sh_coef(harmonics, degree, order, sign):
     if sign not in harmonics[degree][order]:
         return 0.
     return harmonics[degree][order][sign]
+
+
+def estim_covariance(residuals, beta0, d_beta):
+    m = len(beta0)
+    jac = list()
+    for b, db, ej in zip(beta0, d_beta, np.eye(m)):
+        jac.append((residuals(beta0 + ej * db / 2.) - residuals(beta0 - ej * db / 2.)) / db)
+    jac = np.stack(jac, axis=-1)
+    return Results(beta0, jac)
 
 
 def show_covariance(mu, cov, names, true_values=None, rng=None):

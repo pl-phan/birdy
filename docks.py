@@ -31,12 +31,12 @@ def docks(name, t_start, t_end, dt, init_pos, init_vel,
             for test_file in test_files:
                 os.remove(os.path.join(work_dir, test_file))
             os.removedirs(work_dir)
-            if verbose >= 1:
+            if verbose:
                 print('Using already existing dir {}'.format(test_dir))
             return os.path.basename(test_dir), docks_parser(os.path.join(test_dir, 'traj.txt'))
 
     # Else create new trajectory
-    if verbose >= 1:
+    if verbose:
         print('Creating new dir {}'.format(work_dir))
 
     subprocess.run(
