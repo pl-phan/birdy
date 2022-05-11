@@ -195,7 +195,7 @@ def run(mode, data, mass, b_sat, b_cub, vel, seed=None, verbose=0, method='estim
 
 
 if __name__ == '__main__':
-    seed_meta = 19930321
+    seed_meta = 19930322
     rng_meta = np.random.default_rng(seed_meta)
 
     logs = list()
@@ -205,7 +205,7 @@ if __name__ == '__main__':
         for MODE in ('earth', 'cubesat'):
             print('\tmode: {}'.format(MODE))
             for DATA in ('ranging', 'doppler', 'both'):
-                sigma = run(MODE, DATA, m, 2000e3, 200e3, 150., seed=SEED, verbose=0)
+                sigma = run(MODE, DATA, m, 200e3, -200e3, 50., seed=SEED, verbose=0)
                 logs.append((MODE, DATA, m, sigma))
                 print('\t\tdata: {} --> {:.3f}'.format(DATA, 100. * sigma))
 
@@ -214,7 +214,7 @@ if __name__ == '__main__':
 
     df = pd.read_csv('results_{}.csv'.format(seed_meta))
     df = df.sort_values(['mode', 'data', 'mass'])
-    df.to_csv('results.csv', index=False)
+    df.to_csv('results_{}.csv'.format(seed_meta), index=False)
     fig = go.Figure()
     for MODE in ('earth', 'cubesat'):
         for DATA in ('ranging', 'doppler', 'both'):
