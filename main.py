@@ -18,8 +18,8 @@ t_start = pd.to_datetime('2010-07-10 11:45:00')
 t_end = pd.to_datetime('2010-07-10 21:45:00')
 dt = 30.
 int_time = 60.  # s
-delay_noise = 4e-8  # s
-freq_noise = 1e-1  # Hz
+delay_noise = 2e-8  # s
+freq_noise = 5e-3  # Hz
 
 
 def generate_data(mass, earth_init, ast_init, v, b_sat, b_cub, alpha, beta, t_ca,
@@ -106,15 +106,15 @@ def generate_model(mass, earth_init, ast_init, sat_init, cub_init,
     return delay, freq
 
 
-def run(mode, data, mass, b_sat, b_cub, vel, seed=None, verbose=0, method='estim'):
+def run(mode, data, mass, b_sat, b_cub, vel, seed=None, verbose=0, method='estim', d_mass=None):
     earth = np.array((4.6E+10, -1.4E+11, 5.3E+06, 2.8E+04, 9.1E+03, -2.5E-01))
     ast = np.array((-4.0E+11, -6.5E+10, 2.1E+10, 4.6E+03, -1.6E+04, -3.8E+02))
 
     # data generation with noise
     (delay_data, freq_data), (sat, cub) = generate_data(
         mass=mass, earth_init=earth, ast_init=ast, v=vel, b_sat=b_sat, b_cub=b_cub,
-        alpha=135. * pi / 180., beta=10. * pi / 180.,
-        t_ca=pd.to_datetime('2010-07-10 16:45:00'), mode=mode, seed=seed, verbose=verbose
+        alpha=170. * pi / 180., beta=3. * pi / 180.,
+        t_ca=pd.to_datetime('2010-07-10 15:45:00'), mode=mode, seed=seed, verbose=verbose
     )
     delay_uncertainty = delay_noise
     freq_uncertainty = freq_noise
@@ -165,8 +165,12 @@ def run(mode, data, mass, b_sat, b_cub, vel, seed=None, verbose=0, method='estim
         return (x - y) / sigmas
 
     beta0 = np.array((mass,))
+    if d_mass is None:
+        d_beta = beta0 * 1e-3
+    else:
+        d_beta = np.array((d_mass,))
     if method == 'estim':
-        results = estim_covariance(residuals, beta0, d_beta=beta0 * 1e-5)
+        results = estim_covariance(residuals, beta0, d_beta)
     elif method == 'least_squares':
         results = least_squares(residuals, x0=beta0, diff_step=5e-5, ftol=1e-6, xtol=5e-5, gtol=float('nan'))
     else:
@@ -175,6 +179,12 @@ def run(mode, data, mass, b_sat, b_cub, vel, seed=None, verbose=0, method='estim
     p_opt = results.x
     try:
         p_cov = np.linalg.inv(results.jac.T @ results.jac)
+        # # noinspection PyTupleAssignmentBalance
+        # _, s, VT = svd(results.jac, full_matrices=False)
+        # threshold = np.finfo(float).eps * max(results.jac.shape) * s[0]
+        # s = s[s > threshold]
+        # VT = VT[:s.size]
+        # p_cov = np.dot(VT.T / s**2, VT)
     except np.linalg.LinAlgError:
         p_cov = np.full((len(beta0), len(beta0)), float('+inf'))
     p_sigmas = p_cov.diagonal() ** 0.5
@@ -185,7 +195,7 @@ def run(mode, data, mass, b_sat, b_cub, vel, seed=None, verbose=0, method='estim
         for p, s in zip(p_opt, p_sigmas):
             print('[{:.7E} --> {:.7E}]'.format(p - 3. * s, p + 3. * s))
         fig0.show()
-        show_covariance(p_opt, p_cov, ('mass',), true_values=(mass,))
+        show_covariance(p_opt, p_cov, ('mass',), ('kg',), true_values=(mass,))
 
     mass_optim = p_opt[0]
     mass_sigma = p_sigmas[0]
@@ -195,30 +205,40 @@ def run(mode, data, mass, b_sat, b_cub, vel, seed=None, verbose=0, method='estim
 
 
 if __name__ == '__main__':
-    seed_meta = 19930322
+    seed_meta = 19960319
     rng_meta = np.random.default_rng(seed_meta)
+    (b_sat, vel) = 3000e3, 15e3
+    res_file = 'results_{:d}_{:d}_{:d}.csv'.format(int(b_sat), int(vel), seed_meta)
+
+    DATA = 'doppler'
 
     logs = list()
-    for m in np.geomspace(1e18, 1e10, num=81):
+    for m in np.geomspace(1e14, 1e18, num=13):
         print('mass: {:.7E}'.format(m))
         SEED = int(rng_meta.uniform(111111, 999999))
-        for MODE in ('earth', 'cubesat'):
-            print('\tmode: {}'.format(MODE))
-            for DATA in ('ranging', 'doppler', 'both'):
-                sigma = run(MODE, DATA, m, 200e3, -200e3, 50., seed=SEED, verbose=0)
-                logs.append((MODE, DATA, m, sigma))
-                print('\t\tdata: {} --> {:.3f}'.format(DATA, 100. * sigma))
 
-                df = pd.DataFrame(data=logs, columns=('mode', 'data', 'mass', 'sigma'))
-                df.to_csv('results_{}.csv'.format(seed_meta), index=False)
+        sigma = run('earth', DATA, m, b_sat, -b_sat, vel, seed=SEED, verbose=0)
+        logs.append(('earth', DATA, m, sigma))
+        print('\t\tmode: earth --> {:.3f}%'.format(100. * sigma))
 
-    df = pd.read_csv('results_{}.csv'.format(seed_meta))
+        sigma = run('cubesat', DATA, m, b_sat, -b_sat, vel, seed=SEED, verbose=0)
+        logs.append(('cubesat', DATA, m, sigma))
+        print('\t\tmode: cubesat --> {:.3f}%'.format(100. * sigma))
+
+        sigma = run('cubesat', DATA, m, b_sat, -b_sat / 10., vel, seed=SEED, verbose=0)
+        logs.append(('cubesat_close', DATA, m, sigma))
+        print('\t\tmode: cubesat_close --> {:.3f}%'.format(100. * sigma))
+
+        df = pd.DataFrame(data=logs, columns=('mode', 'data', 'mass', 'sigma'))
+        df.to_csv(res_file, index=False)
+
+    df = pd.read_csv(res_file)
     df = df.sort_values(['mode', 'data', 'mass'])
-    df.to_csv('results_{}.csv'.format(seed_meta), index=False)
+    df.to_csv(res_file, index=False)
     fig = go.Figure()
-    for MODE in ('earth', 'cubesat'):
-        for DATA in ('ranging', 'doppler', 'both'):
-            df_sub = df.loc[(df['mode'] == MODE) & (df['data'] == DATA)]
-            fig.add_trace(go.Scatter(x=df_sub.mass, y=df_sub.sigma, name='{}_{}'.format(MODE, DATA)))
+    for MODE in ('earth', 'cubesat', 'cubesat_close'):
+        df_sub = df.loc[(df['mode'] == MODE) & (df['data'] == DATA)]
+        fig.add_trace(go.Scatter(x=df_sub.mass, y=df_sub.sigma, name=MODE))
     fig.update_xaxes(type='log')
+    fig.update_yaxes(type='log')
     fig.show()

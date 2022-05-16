@@ -88,26 +88,31 @@ def estim_covariance(residuals, beta0, d_beta):
     m = len(beta0)
     jac = list()
     for b, db, ej in zip(beta0, d_beta, np.eye(m)):
-        jac.append((residuals(beta0 + ej * db / 2.) - residuals(beta0 - ej * db / 2.)) / db)
+        jac_p = (residuals(beta0 + ej * db) - residuals(beta0)) / db
+        jac_m = (residuals(beta0) - residuals(beta0 - ej * db)) / db
+        jac.append((jac_p + jac_m) / 2.)
     jac = np.stack(jac, axis=-1)
     return Results(beta0, jac)
 
 
-def show_covariance(mu, cov, names, true_values=None, rng=None):
+def show_covariance(mu, cov, names, units=None, true_values=None, rng=None):
     if not rng:
         rng = np.random.default_rng()
+    if not units:
+        units = ['' for _ in names]
 
     n = len(mu)
-    samples = rng.multivariate_normal(mean=mu, cov=cov, size=100000)
-    fig = make_subplots(rows=n, cols=n, subplot_titles=['{}, {}'.format(*k) for k in itertools.product(names, names)])
+    samples = rng.multivariate_normal(mean=mu, cov=cov, size=1000000)
+    fig = make_subplots(rows=n, cols=n)
     for i in range(n):
         for j in range(n):
+            fig.update_xaxes(title_text='{} ({})'.format(names[i], units[i]), col=i + 1, row=j + 1)
             if i == j:
                 fig.add_histogram(x=samples[:, i], col=i + 1, row=j + 1,
-                                  marker={'color': 'black'})
+                                  marker={'color': 'black'}, histnorm='probability density')
             else:
-                fig.add_histogram2d(x=samples[:, i], y=samples[:, j], col=i + 1, row=j + 1,
-                                    coloraxis='coloraxis')
+                fig.add_histogram2d(x=samples[:, i], y=samples[:, j], col=i + 1, row=j + 1, coloraxis='coloraxis')
+                fig.update_yaxes(title_text='{} ({})'.format(names[j], units[j]), col=i + 1, row=j + 1)
     if true_values:
         for i in range(n):
             for j in range(n):
@@ -117,7 +122,7 @@ def show_covariance(mu, cov, names, true_values=None, rng=None):
                 else:
                     fig.add_scatter(x=true_values[i:i+1], y=true_values[j:j+1], col=i + 1, row=j + 1,
                                     marker={'color': 'green', 'symbol': 'cross'})
-    fig.update_layout(showlegend=False, coloraxis=dict(colorscale='greys'))
+    fig.update_layout(title='Result distribution', showlegend=False, coloraxis=dict(colorscale='greys'))
     fig.update_coloraxes(showscale=False)
     fig.show()
 
