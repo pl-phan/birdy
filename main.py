@@ -204,41 +204,60 @@ def run(mode, data, mass, b_sat, b_cub, vel, seed=None, verbose=0, method='estim
     return mass_sigma / mass_optim
 
 
+def run2(mode, masses, b_sat, b_cub, vel, seed=None, verbose=0):
+    earth = np.array((4.6E+10, -1.4E+11, 5.3E+06, 2.8E+04, 9.1E+03, -2.5E-01))
+    ast = np.array((-4.0E+11, -6.5E+10, 2.1E+10, 4.6E+03, -1.6E+04, -3.8E+02))
+
+    # data generation with noise
+    _, (sat, cub) = generate_data(
+        mass=masses[0], earth_init=earth, ast_init=ast, v=vel, b_sat=b_sat, b_cub=b_cub,
+        alpha=170. * pi / 180., beta=3. * pi / 180.,
+        t_ca=pd.to_datetime('2010-07-10 15:45:00'), mode=mode, seed=seed, verbose=verbose
+    )
+    delay_ref, freq_ref = generate_model(0., earth, ast, sat, cub, mode=mode, verbose=verbose)
+
+    fig0 = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.01)
+    for m in masses:
+        delay_model, freq_model = generate_model(m, earth, ast, sat, cub, mode=mode, verbose=verbose)
+
+        plot_color = next_color()
+        fig0.add_scatter(x=delay_model.index, y=delay_model - delay_ref, name='m={:.2E}'.format(m),
+                         col=1, row=1, mode='lines', line={'color': plot_color})
+        fig0.add_scatter(x=freq_model.index, y=freq_model - freq_ref, name='m={:.2E}'.format(m),
+                         col=1, row=2, mode='lines', line={'color': plot_color}, showlegend=False)
+    fig0.show()
+
+
 if __name__ == '__main__':
     seed_meta = 19960319
+    # run2('earth', np.linspace(1e18, 2e18, num=5), 3000, -3000, 1500, seed=seed_meta, verbose=2)
     rng_meta = np.random.default_rng(seed_meta)
-    (b_sat, vel) = 3000e3, 15e3
-    res_file = 'results_{:d}_{:d}_{:d}.csv'.format(int(b_sat), int(vel), seed_meta)
+    (b_sat, b_cub, mass) = 3000e3, 1000e3, 3e16
+    res_file = 'results_{:d}_{:d}_{:d}_{:d}.csv'.format(int(b_sat), int(b_cub), int(mass), seed_meta)
 
     DATA = 'doppler'
 
     logs = list()
-    for m in np.geomspace(1e14, 1e18, num=13):
-        print('mass: {:.7E}'.format(m))
+    for vel in np.geomspace(100, 10000, num=11):
+        print('dist: {:.7E}'.format(vel))
         SEED = int(rng_meta.uniform(111111, 999999))
 
-        sigma = run('earth', DATA, m, b_sat, -b_sat, vel, seed=SEED, verbose=0)
-        logs.append(('earth', DATA, m, sigma))
-        print('\t\tmode: earth --> {:.3f}%'.format(100. * sigma))
+        sigma1 = run('earth', DATA, mass, b_sat, -b_cub, vel, seed=SEED, verbose=0)
+        print('\t\tmode: earth --> {:.3f}%'.format(100. * sigma1))
 
-        sigma = run('cubesat', DATA, m, b_sat, -b_sat, vel, seed=SEED, verbose=0)
-        logs.append(('cubesat', DATA, m, sigma))
-        print('\t\tmode: cubesat --> {:.3f}%'.format(100. * sigma))
+        sigma2 = run('cubesat', DATA, mass, b_sat, -b_cub, vel, seed=SEED, verbose=0)
+        print('\t\tmode: cubesat --> {:.3f}%'.format(100. * sigma2))
 
-        sigma = run('cubesat', DATA, m, b_sat, -b_sat / 10., vel, seed=SEED, verbose=0)
-        logs.append(('cubesat_close', DATA, m, sigma))
-        print('\t\tmode: cubesat_close --> {:.3f}%'.format(100. * sigma))
+        logs.append(('cubesat', DATA, vel, sigma1 / sigma2))
 
-        df = pd.DataFrame(data=logs, columns=('mode', 'data', 'mass', 'sigma'))
+        df = pd.DataFrame(data=logs, columns=('mode', 'data', 'vel', 'alpha'))
         df.to_csv(res_file, index=False)
 
     df = pd.read_csv(res_file)
-    df = df.sort_values(['mode', 'data', 'mass'])
+    df = df.sort_values(['mode', 'data', 'vel'])
     df.to_csv(res_file, index=False)
     fig = go.Figure()
-    for MODE in ('earth', 'cubesat', 'cubesat_close'):
-        df_sub = df.loc[(df['mode'] == MODE) & (df['data'] == DATA)]
-        fig.add_trace(go.Scatter(x=df_sub.mass, y=df_sub.sigma, name=MODE))
+    fig.add_trace(go.Scatter(x=df.vel, y=df.alpha))
     fig.update_xaxes(type='log')
     fig.update_yaxes(type='log')
     fig.show()
