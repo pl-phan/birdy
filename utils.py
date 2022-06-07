@@ -14,26 +14,6 @@ def unit_vector(alpha, beta):
     return Rotation.from_euler('ZY', (alpha, beta)).apply(np.array((1., 0., 0.)))
 
 
-def measurements(probe, observer, f0, ranging_noise=None, doppler_noise=None, seed=None):
-    rng = np.random.default_rng(seed)
-
-    relative = probe - observer
-    # ranging
-    rho = np.linalg.norm(relative[:, 0:3], axis=1)
-    ranging = 2. * rho / c
-    # doppler frequency
-    v_r = (relative[:, 0:3] * relative[:, 3:6]).sum(axis=1) / rho
-    doppler = - 2. * f0 * v_r / c
-
-    if ranging_noise or doppler_noise:
-        if ranging_noise:
-            ranging += rng.normal(scale=ranging_noise, size=len(ranging))
-        if doppler_noise:
-            doppler += rng.normal(scale=doppler_noise, size=len(doppler))
-
-    return ranging, doppler
-
-
 def next_color():
     return next(color_iterator)
 
