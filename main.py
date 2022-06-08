@@ -1,6 +1,7 @@
 import numpy as np
 import plotly.graph_objects as go
 from numpy import pi
+from plotly.subplots import make_subplots
 
 from integration import integrate
 from measurement import measure, add_noise
@@ -17,67 +18,67 @@ delta = 4.5e11  # m
 earth = np.array((*unit_vector(alpha, beta), 0., 0., 0.)) * delta
 
 # measurement  noise
-ranging_noise = 2e-8  # s
-doppler_noise = 5e-3  # Hz
+ranging_noise = 1.1e-7  # s
+doppler_noise = 2.4e-2  # Hz
 
 
-def run(mass_true, vel, b_sat, seed=None, verbose=False):
-    # TODO: choose mode (cubesat), data (ranging/doppler), Jn
-    # TODO: plot
+def get_relative_uncertainty(gravity_field, vel, b_sat, seed=None, verbose=False):
+    # TODO: plot & print
+    # TODO: choose mode (cubesat), data (ranging/doppler), Jn, only variation
+    # todo test variational <-> diffs for Jn
 
-    def model(mu):
-        t, traj, traj_var = integrate(mu, vel, b_sat)
+    def model(params):
+        t, traj, traj_var = integrate(params, vel, b_sat)
         y, y_var = measure(traj - earth, traj_var)
-        return y, y_var
+        return t, y, y_var
 
-    mu_true = mass_true * G
+    if verbose:
+        msg = 'true gravitational field: GM={:.7E}'.format(gravity_field[0])
+        for i, j in enumerate(gravity_field[1:], 2):
+            msg += ' J{:d}={:.7E}'.format(i, j)
+        print(msg)
 
     # data generation with noise
-    y_data, _ = model(mu_true)
-    y_data, sigmas = add_noise(y_data, ranging_noise, doppler_noise, seed=seed)
+    t_data, y_data, _ = model(gravity_field)
+    y_data, uncertainties = add_noise(y_data, ranging_noise, doppler_noise, seed=seed)
+    n = len(t_data)
+
+    t_model, y_model, _ = model(gravity_field)
+    r_model = y_model - y_data
+    if not np.array_equal(t_model, t_data):
+        raise ValueError('time indexes do not match')
+
+    p0 = gravity_field * 2
+    _, y0, _ = model(p0)
+    r0 = y0 - y_data
 
     # least squares fit
-    opt = Optimizer(model, y_data, sigmas)
-    results = opt.least_squares(mu_true, method='variational_eq')
-    # results = opt.least_squares(mu_true, method='finite_diff')
-    mu_opt = results.x[0]
-    try:
-        cov = np.linalg.inv(results.jac.T @ results.jac)
-    except np.linalg.LinAlgError:
-        cov = np.full((1, 1), fill_value=float('+inf'))
-    mu_sig = (cov.diagonal() ** 0.5)[0]
+    opt = Optimizer(model, y_data, uncertainties)
+    p_opt, p_cov, p_rel = opt.least_squares(p0, method='variational_eq')
 
-    # p_opt = results.x
-    # try:
-    #     p_cov = np.linalg.inv(results.jac.T @ results.jac)
-    # except np.linalg.LinAlgError:
-    #     p_cov = np.full((1, 1), fill_value=float('+inf'))
-    # p_sig = p_cov.diagonal() ** 0.5
-    #
-    # if verbose:
-    #     print('solution: ' + ', '.join(('{:.7E}'.format(p) for p in p_opt)))
-    #     print('sigmas: ' + ', '.join(('{:.4f} %'.format(100. * s / abs(p)) for p, s in zip(p_opt, p_sig))))
-    #     for p, s in zip(p_opt, p_sig):
-    #         print('[{:.7E} --> {:.7E}]'.format(p - 3. * s, p + 3. * s))
-    #     show_covariance(p_opt, p_cov, ('mu',), ('m3/s2',), true_values=(mu_true,))
-    #
-    # mu_opt = p_opt[0]
-    # mu_sig = p_sig[0]
-    # if (mu_true < mu_opt - 3. * mu_sig) or (mu_true > mu_opt + 3. * mu_sig):
-    #     print('!- MU NOT IN 3-SIGMAS -! (mu={:.7E}, {:.2f} sigmas)'.format(mu_true, abs(mu_true - mu_opt) / mu_sig))
-    return mu_sig / mu_opt
+    _, y_opt, _ = model(p_opt)
+    r_opt = y_model - y_data
+
+    if verbose:
+        msg = 'found gravitational field:\nGM={:.7E} ± {:.3f}%'.format(p_opt[0], p_rel[0])
+        for i, (j, s) in enumerate(zip(p_opt[1:], p_rel[1:]), 2):
+            msg += '\nJ{:d}={:.7E} ± {:.3f}%'.format(i, j, 100. * s)
+        print(msg)
+
+        gravity_coefs = ['mu'] + ['J{:d}'.format(i) for i, _ in enumerate(p_rel[1:], 2)]
+        gravity_units = ['m3/s2'] + ['' for _ in p_rel[1:]]
+        show_covariance(p_opt, p_cov, gravity_coefs, gravity_units, true_values=gravity_field)
+
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                            vertical_spacing=0.02, subplot_titles=('ranging', 'doppler'))
+        for r, name in zip((r_model, r0, r_opt), ('model', 'guess', 'solution')):
+            fig.add_trace(go.Scatter(x=t_data, y=r[:n], mode='markers', name=name), row=1, col=1)
+            fig.add_trace(go.Scatter(x=t_data, y=r[n:], mode='markers', name=name), row=2, col=1)
+        fig.show()
+
+    return p_rel
 
 
 if __name__ == '__main__':
-    bs = np.geomspace(50e3, 3000e3, num=20)
-    gammas = np.empty_like(bs)
-    for i, b in enumerate(bs):
-        gamma = run(mass_true=1e16, vel=10e3, b_sat=b, seed=19960319, verbose=True)
-        print('b: {:.1E}, rel_unc: {:.4f} %'.format(b, 100. * gamma))
-        gammas[i] = gamma
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=bs, y=gammas))
-    fig.update_xaxes(type="log")
-    fig.update_yaxes(type="log")
-    fig.show()
+    sig = get_relative_uncertainty(gravity_field=np.array((G * 1.7e18, 1.9e-2)),
+                                   vel=15e3, b_sat=3000e3, seed=19960319, verbose=True)

@@ -10,6 +10,14 @@ color_iterator = itertools.cycle(DEFAULT_PLOTLY_COLORS)
 c = 3e8  # m/s
 
 
+def mul_1d(a, b):
+    return np.einsum('i...,i...->i...', a, b)
+
+
+def dot_1d(a, b):
+    return np.einsum('ij...,ij...->i...', a, b)
+
+
 def unit_vector(alpha, beta):
     return Rotation.from_euler('ZY', (alpha, beta)).apply(np.array((1., 0., 0.)))
 
@@ -37,7 +45,7 @@ def show_covariance(mu, cov, names, units=None, true_values=None):
             else:
                 fig.add_histogram2d(x=samples[:, i], y=samples[:, j], col=i + 1, row=j + 1, coloraxis='coloraxis')
                 fig.update_yaxes(title_text='{} ({})'.format(names[j], units[j]), col=i + 1, row=j + 1)
-    if true_values:
+    if true_values is not None:
         for i in range(n):
             for j in range(n):
                 if i == j:
