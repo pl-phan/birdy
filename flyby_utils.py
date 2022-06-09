@@ -35,7 +35,8 @@ def coords_to_params(pos, vel, obs):
 
 def params_to_coords(v, b, time_close_approach):
     x0 = -v * time_close_approach
-    return np.array((x0, -b, 0., v, 0., 0.))
+    y0 = -b
+    return np.array((x0, y0, 0., v, 0., 0.))
 
 
 def print_flyby_params(t, trajectory, observer):

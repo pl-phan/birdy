@@ -4,7 +4,6 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.colors import DEFAULT_PLOTLY_COLORS
 from plotly.subplots import make_subplots
-from scipy.spatial.transform import Rotation
 
 color_iterator = itertools.cycle(DEFAULT_PLOTLY_COLORS)
 c = 3e8  # m/s
@@ -18,16 +17,12 @@ def dot_1d(a, b):
     return np.einsum('ij...,ij...->i...', a, b)
 
 
-def unit_vector(alpha, beta):
-    return Rotation.from_euler('ZY', (alpha, beta)).apply(np.array((1., 0., 0.)))
-
-
 def next_color():
     return next(color_iterator)
 
 
-def show_covariance(mu, cov, names, units=None, true_values=None):
-    rng = np.random.default_rng()
+def show_covariance(mu, cov, names, units=None, true_values=None, seed=None):
+    rng = np.random.default_rng(seed)
 
     if not units:
         units = ['' for _ in names]
@@ -55,6 +50,26 @@ def show_covariance(mu, cov, names, units=None, true_values=None):
                                     marker={'color': 'green', 'symbol': 'cross'})
     fig.update_layout(title='Result distribution', showlegend=False, coloraxis=dict(colorscale='greys'))
     fig.update_coloraxes(showscale=False)
+    fig.show()
+
+
+def show_fit(t, data, model, p_opt, p_cov, n_samples=20, seed=None):
+    n = len(t)
+    _, y_ref, _ = model(np.zeros_like(p_opt))
+
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                        vertical_spacing=0.02, subplot_titles=('ranging', 'doppler'))
+    fig.add_trace(go.Scatter(x=t, y=data[:n] - y_ref[:n], mode='markers', marker={'symbol': 'cross', 'size': 3, 'color': 'red'}, name='data'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=t, y=data[n:] - y_ref[n:], mode='markers', marker={'symbol': 'cross', 'size': 3, 'color': 'red'}, name='data'), row=2, col=1)
+
+    rng = np.random.default_rng(seed)
+    samples = rng.multivariate_normal(mean=p_opt, cov=p_cov, size=n_samples)
+    for i, p in enumerate(samples, 1):
+        print('sampling... {}/{}'.format(i, n_samples))
+        _, y, _ = model(p)
+        fig.add_trace(go.Scatter(x=t, y=y[:n] - y_ref[:n], mode='lines', line={'width': 0.2, 'color': 'black'}), row=1, col=1)
+        fig.add_trace(go.Scatter(x=t, y=y[n:] - y_ref[n:], mode='lines', line={'width': 0.2, 'color': 'black'}), row=2, col=1)
+
     fig.show()
 
 

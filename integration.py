@@ -1,6 +1,9 @@
 import numpy as np
 import plotly.graph_objects as go
+from numpy import pi
 from scipy.integrate import RK45
+from scipy.spatial.transform import Rotation
+from scipy.special import legendre
 
 from flyby_utils import params_to_coords
 
@@ -10,34 +13,40 @@ t_ca = 4. * 3600.  # s
 t_max = 10. * 3600.  # s
 
 
-def gravity(r, gravity_field):
-    return - gravity_field[0] * r / np.linalg.norm(r) ** 3.
-
-
-def variational_eq(r, degree):
-    if degree == 1:
-        degree = 0
-
-    if degree == 0:
-        return - r / np.linalg.norm(r) ** 3.
-    else:
-        raise NotImplementedError
-
-
-def integrate(gravity_field, vel, b_sat):
-    jac_shape = (6, len(gravity_field))
+def integrate(gravity_field, r_ast, alpha_ast, beta_ast, vel, b_sat):
     y0 = params_to_coords(vel, b_sat, t_ca)
+    rot = Rotation.from_euler('XY', (beta_ast, alpha_ast - pi / 2.))
+    y0 = rot.apply(y0.reshape(2, 3)).reshape(6)
+
+    jac_shape = (6, len(gravity_field))
     y_var_0 = np.zeros(jac_shape)
 
     dy = np.empty_like(y0)
     dy_var = np.empty_like(y_var_0)
 
     def func(y, y_var):
+        dy_var[0:3, :] = y_var[3:6, :]
+        # variational equations for the gravity field
+        rho = np.linalg.norm(y[0:3])
+        sin_phi = y[2] / rho
+        alpha = r_ast / rho
+        mu4 = gravity_field[0] / rho ** 4.
+
+        # classical gravitational force
+        dy_var[3:6, 0] = - y[0:3] / rho ** 3.
+
+        # zonal gravitational force
+        beta = alpha
+        for n in range(2, dy_var.shape[1] + 1):
+            beta *= alpha
+            a = (n + 1) * legendre(n)(sin_phi) * rho
+            b = legendre(n).deriv()(sin_phi)
+            dy_var[3:5, n - 1] = mu4 * beta * y[0:2] * (a + b * y[2])
+            dy_var[5, n - 1] = mu4 * beta * (a * y[2] - b * y[0:2] @ y[0:2])
+
+        # 2nd law of motion
         dy[0:3] = y[3:6]
-        dy[3:6] = gravity(y[0:3], gravity_field)
-        for i in range(len(gravity_field)):
-            dy_var[0:3, i] = y_var[3:6, i]
-            dy_var[3:6, i] = variational_eq(y[0:3], i + 1)
+        dy[3:6] = dy_var[3:6, :] @ gravity_field
         return dy, dy_var
 
     y_vec_0 = np.concatenate((y0, y_var_0.flatten()))
@@ -54,20 +63,21 @@ def integrate(gravity_field, vel, b_sat):
     trajectory = np.empty((n_iter, 6), dtype='float')
     trajectory_var = np.empty((n_iter, *jac_shape), dtype='float')
 
-    k = 0
+    i = 0
     while rk.status == 'running':
-        if k >= n_iter:
+        if i >= n_iter:
             break
-        ts[k] = rk.t
-        dts[k] = rk.step_size
+        ts[i] = rk.t
+        dts[i] = rk.step_size
 
-        trajectory[k] = rk.y[:6]
-        trajectory_var[k] = rk.y[6:].reshape(jac_shape)
+        trajectory[i] = rk.y[:6]
+        trajectory_var[i] = rk.y[6:].reshape(jac_shape)
         rk.step()
-        k += 1
+        i += 1
 
     if rk.status == 'failed':
         raise ValueError('failed integration')
+    # check constant step size
     dts = dts[1:]
     if min(dts) < dt:
         raise ValueError('step_size went down to {}'.format(min(dts)))
@@ -78,10 +88,7 @@ def integrate(gravity_field, vel, b_sat):
 if __name__ == '__main__':
     G = 6.6743e-11  # m3/kg/s2
     grav = np.array((G * 1.7e18, 1.9e-2, -1.2e-3, -6.5e-3))
-    v = 15e3  # m/s
-    b = 3000e3  # m
-
-    t, traj, traj_var = integrate(grav, v, b)
+    t, traj, traj_var = integrate(grav, 50e3, 15e3, 3000e3)
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=t, y=traj[:, 0], name='x'))
