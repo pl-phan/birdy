@@ -16,17 +16,16 @@ t_ca = 4. * 3600.  # s
 t_max = 10. * 3600.  # s
 
 
-def integrate(gravity_field, r_ast, alpha_ast, beta_ast, vel, b_sat):
-    config = np.array((*gravity_field, r_ast, alpha_ast, beta_ast, vel, b_sat,
-                       dt, t_ca, t_max))
+def integrate(gravity_field, r_ast, vel, b, bz=0., alpha=pi / 2., beta=0.):
+    config = np.array((*gravity_field, r_ast, alpha, beta, vel, b, bz, dt, t_ca, t_max))
     filename = './data/{}.npz'.format(adler32(config.tobytes()))
 
     if os.path.isfile(filename):
         data = np.load(filename, allow_pickle=False)
         return data['t'], data['traj'], data['traj_var']
 
-    y0 = params_to_coords(vel, b_sat, t_ca)
-    rot = Rotation.from_euler('XY', (beta_ast, alpha_ast - pi / 2.))
+    y0 = params_to_coords(vel, b, bz, t_ca)
+    rot = Rotation.from_euler('XY', (beta, alpha - pi / 2.))
     y0 = rot.apply(y0.reshape(2, 3)).reshape(6)
 
     jac_shape = (6, len(gravity_field))
@@ -50,10 +49,10 @@ def integrate(gravity_field, r_ast, alpha_ast, beta_ast, vel, b_sat):
         beta = alpha
         for n in range(2, dy_var.shape[1] + 1):
             beta *= alpha
-            a = (n + 1) * legendre(n)(sin_phi) * rho
-            b = legendre(n).deriv()(sin_phi)
-            dy_var[3:5, n - 1] = mu4 * beta * y[0:2] * (a + b * y[2])
-            dy_var[5, n - 1] = mu4 * beta * (a * y[2] - b * y[0:2] @ y[0:2])
+            c1 = (n + 1) * legendre(n)(sin_phi) * rho
+            c2 = legendre(n).deriv()(sin_phi)
+            dy_var[3:5, n - 1] = mu4 * beta * y[0:2] * (c1 + c2 * y[2])
+            dy_var[5, n - 1] = mu4 * beta * (c1 * y[2] - c2 * y[0:2] @ y[0:2])
 
         # 2nd law of motion
         dy[0:3] = y[3:6]

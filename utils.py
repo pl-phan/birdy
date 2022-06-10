@@ -21,6 +21,16 @@ def next_color():
     return next(color_iterator)
 
 
+def jac2cov(p, jac):
+    hes = jac.T @ jac
+    try:
+        cov = np.linalg.inv(hes)
+    except np.linalg.LinAlgError:
+        cov = np.full_like(hes, fill_value=float('+inf'))
+    rel = cov.diagonal() ** 0.5 / p
+    return p, cov, rel
+
+
 def show_covariance(mu, cov, names, units=None, true_values=None, n_samples=100000, seed=None):
     rng = np.random.default_rng(seed)
 

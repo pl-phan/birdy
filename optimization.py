@@ -3,7 +3,7 @@ from collections import namedtuple
 import numpy as np
 from scipy.optimize import least_squares
 
-from utils import mul_1d
+from utils import mul_1d, jac2cov
 
 Results = namedtuple('Results', 'x jac')
 
@@ -41,22 +41,10 @@ class Optimizer:
         elif method == 'finite_diff':
             results = least_squares(self._get_residuals, x0=guess, diff_step=1e-3,
                                     ftol=1e-6, xtol=5e-5, gtol=float('nan'))
-        elif method == 'no_fit':
-            results = Results(x=guess, jac=self._get_jacobian(guess))
         else:
             raise NotImplementedError
 
-        p_opt = results.x
-        p_hes = results.jac.T @ results.jac
-        try:
-            p_cov = np.linalg.inv(p_hes)
-        except np.linalg.LinAlgError:
-            p_cov = np.full_like(p_hes, fill_value=float('+inf'))
-
-        p_sig = p_cov.diagonal() ** 0.5
-        p_rel = p_sig / p_opt
-
-        return p_opt, p_cov, p_rel
+        return jac2cov(results.x, results.jac)
 
 
 if __name__ == '__main__':
