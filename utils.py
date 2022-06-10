@@ -21,14 +21,14 @@ def next_color():
     return next(color_iterator)
 
 
-def show_covariance(mu, cov, names, units=None, true_values=None, seed=None):
+def show_covariance(mu, cov, names, units=None, true_values=None, n_samples=100000, seed=None):
     rng = np.random.default_rng(seed)
 
     if not units:
         units = ['' for _ in names]
 
     n = len(mu)
-    samples = rng.multivariate_normal(mean=mu, cov=cov, size=1000000)
+    samples = rng.multivariate_normal(mean=mu, cov=cov, size=n_samples)
 
     fig = make_subplots(rows=n, cols=n)
     for i in range(n):
@@ -53,22 +53,31 @@ def show_covariance(mu, cov, names, units=None, true_values=None, seed=None):
     fig.show()
 
 
-def show_fit(t, data, model, p_opt, p_cov, n_samples=20, seed=None):
+def show_fit(t, data, sigmas, model, p_opt, p_cov, n_samples=20, seed=None):
     n = len(t)
     _, y_ref, _ = model(np.zeros_like(p_opt))
 
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
                         vertical_spacing=0.02, subplot_titles=('ranging', 'doppler'))
-    fig.add_trace(go.Scatter(x=t, y=data[:n] - y_ref[:n], mode='markers', marker={'symbol': 'cross', 'size': 3, 'color': 'red'}, name='data'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=t, y=data[n:] - y_ref[n:], mode='markers', marker={'symbol': 'cross', 'size': 3, 'color': 'red'}, name='data'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=t, y=data[:n] - y_ref[:n], mode='markers',
+                             marker={'symbol': 'cross', 'size': 2., 'color': 'red'},
+                             error_y=dict(type='data', array=sigmas[:n], thickness=1., width=0.),
+                             name='data'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=t, y=data[n:] - y_ref[n:], mode='markers',
+                             marker={'symbol': 'cross', 'size': 2., 'color': 'red'},
+                             error_y=dict(type='data', array=sigmas[n:], thickness=1., width=0.),
+                             name='data'), row=2, col=1)
 
     rng = np.random.default_rng(seed)
-    samples = rng.multivariate_normal(mean=p_opt, cov=p_cov, size=n_samples)
-    for i, p in enumerate(samples, 1):
-        print('sampling... {}/{}'.format(i, n_samples))
+    alpha = 0.3
+    for i in range(n_samples):
+        p = rng.multivariate_normal(mean=p_opt, cov=p_cov)
+        print('sampling... {}/{}'.format(i + 1, n_samples))
         _, y, _ = model(p)
-        fig.add_trace(go.Scatter(x=t, y=y[:n] - y_ref[:n], mode='lines', line={'width': 0.2, 'color': 'black'}), row=1, col=1)
-        fig.add_trace(go.Scatter(x=t, y=y[n:] - y_ref[n:], mode='lines', line={'width': 0.2, 'color': 'black'}), row=2, col=1)
+        fig.add_trace(go.Scatter(x=t, y=y[:n] - y_ref[:n], mode='lines', opacity=1. - (1. - alpha) ** (1. / n_samples),
+                                 line={'width': 1., 'color': 'black'}), row=1, col=1)
+        fig.add_trace(go.Scatter(x=t, y=y[n:] - y_ref[n:], mode='lines', opacity=1. - (1. - alpha) ** (1. / n_samples),
+                                 line={'width': 1., 'color': 'black'}), row=2, col=1)
 
     fig.show()
 

@@ -1,7 +1,11 @@
+from collections import namedtuple
+
 import numpy as np
 from scipy.optimize import least_squares
 
 from utils import mul_1d
+
+Results = namedtuple('Results', 'x jac')
 
 
 class Optimizer:
@@ -37,6 +41,8 @@ class Optimizer:
         elif method == 'finite_diff':
             results = least_squares(self._get_residuals, x0=guess, diff_step=1e-3,
                                     ftol=1e-6, xtol=5e-5, gtol=float('nan'))
+        elif method == 'no_fit':
+            results = Results(x=guess, jac=self._get_jacobian(guess))
         else:
             raise NotImplementedError
 
