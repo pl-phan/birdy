@@ -1,5 +1,5 @@
 import os.path
-from zlib import adler32
+from hashlib import sha1
 
 import numpy as np
 import plotly.graph_objects as go
@@ -18,7 +18,7 @@ t_max = 10. * 3600.  # s
 
 def integrate(gravity_field, r_ast, vel, b, bz=0., alpha=pi / 2., beta=0.):
     config = np.array((*gravity_field, r_ast, alpha, beta, vel, b, bz, dt, t_ca, t_max))
-    filename = './data/{}.npz'.format(adler32(config.tobytes()))
+    filename = './data/{}.npz'.format(sha1(config.tobytes()).hexdigest())
 
     if os.path.isfile(filename):
         data = np.load(filename, allow_pickle=False)

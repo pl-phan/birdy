@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 from numpy import pi
 from scipy.optimize import minimize
@@ -91,7 +92,7 @@ if __name__ == '__main__':
 
     x0 = 1e16
     log_x0 = np.array((np.log(x0),))
-    target = 1e-2
+    target = 5e-2
     log_target = np.log(target)
 
     def find_min_mass(vel, b_sat, verbose=0):
@@ -112,13 +113,15 @@ if __name__ == '__main__':
         print('\t\t v={:.0f}, b={:.0f}, mass={:.2E}'.format(vel, b_sat, res))
         return res
 
-
-    # find_min_mass(10., 100e3)
-
-    ms = np.empty((len(vs), len(bs)))
-    for i, v in enumerate(vs):
-        for j, b in enumerate(bs):
+    ms = np.empty((len(bs), len(vs)))
+    ms_table = list()
+    for j, v in enumerate(vs):
+        for i, b in enumerate(bs):
             ms[i, j] = find_min_mass(v, b)
+            ms_table.append((v, b, ms[i, j]))
+    ms_table = pd.DataFrame(ms_table, columns=('v', 'b', 'm_5p'))
+    print(ms_table)
+    ms_table.to_csv('v_b_m5p.csv', index=False)
 
     fig = go.Figure(data=go.Contour(x=vs, y=bs, z=np.log10(ms)))
     fig.update_xaxes(type="log")
