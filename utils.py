@@ -100,6 +100,17 @@ def plot_trajectories(trajectories):
     fig.show()
 
 
+def SuperScriptinate(number):
+    return number.replace('0','⁰').replace('1','¹').replace('2','²').replace('3','³').replace('4','⁴').replace('5','⁵').replace('6','⁶').replace('7','⁷').replace('8','⁸').replace('9','⁹').replace('-','⁻')
+
+
+def sci_notation(number, sig_fig=1):
+    ret_string = "{0:.{1:d}e}".format(number, sig_fig)
+    a, b = ret_string.split("e")
+    b = int(b)         # removed leading "+" and strips leading zeros too.
+    return a + "x10" + SuperScriptinate(str(b))
+
+
 if __name__ == '__main__':
     # TODO TESTS
     show_covariance((100., 5.), ((3., -1.5), (-1.5, 1.)), names=('p1', 'p2'))

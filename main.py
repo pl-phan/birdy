@@ -87,43 +87,48 @@ if __name__ == '__main__':
     rng = np.random.default_rng(19960319)
     s = int(rng.uniform(11111, 99999))
 
-    vs = np.geomspace(10., 15e3, num=50)
-    bs = np.geomspace(100e3, 3000e3, num=50)
+    N = 98
+    b_min = 50e3
+    b_max = 3000e3
+    bxs = np.concatenate((np.linspace(-b_max, -b_min, num=int(N / 2)), np.linspace(b_min, b_max, num=int(N / 2))))
+    bys = np.linspace(-b_max, -b_min, num=int(N / 2))
 
     x0 = 1e16
     log_x0 = np.array((np.log(x0),))
     target = 5e-2
     log_target = np.log(target)
 
-    def find_min_mass(vel, b_sat, verbose=0):
+    def find_min_mass(bx, by, verbose=0):
 
         def wrapper(params):
             mass, = np.exp(params)
             sig = get_relative_uncertainty(gravity_field=np.array((G * mass,)),
-                                           r_ast=50e3, vel=vel, b_sat=b_sat, seed=s, verbose=verbose)
+                                           r_ast=50e3, vel=10e3, b_sat=3000e3, b_cub=bx, b_cub_z=by,
+                                           seed=s, verbose=verbose)
             log_sig = np.log(sig[0])
             if verbose >= 1:
                 print('mass={:.7E} kg ; sig={:.5f} %'.format(mass, 100. * sig[0]))
                 print('log_mass={:.7E} ; log_sig={:.5f}'.format(params[0], log_sig))
             return (log_sig - log_target) ** 2.
 
-        res = minimize(wrapper, x0=log_x0, method='Nelder-Mead', options={'disp': True})
+        res = minimize(wrapper, x0=log_x0, method='Nelder-Mead',
+                       options={'disp': True, 'fatol': 4e-4, 'xatol': 1e-2})
         res = np.exp(res.x[0])
 
-        print('\t\t v={:.0f}, b={:.0f}, mass={:.2E}'.format(vel, b_sat, res))
+        print('\t\t bx={:.0f}, by={:.0f}, mass={:.2E}'.format(bx, by, res))
         return res
 
-    ms = np.empty((len(bs), len(vs)))
+    ms = np.empty((len(bys), len(bxs)))
     ms_table = list()
-    for j, v in enumerate(vs):
-        for i, b in enumerate(bs):
-            ms[i, j] = find_min_mass(v, b)
-            ms_table.append((v, b, ms[i, j]))
-    ms_table = pd.DataFrame(ms_table, columns=('v', 'b', 'm_5p'))
+    for j, bx in enumerate(bxs):
+        for i, by in enumerate(bys):
+            ms[i, j] = find_min_mass(bx, by)
+            ms_table.append((bx, by, ms[i, j]))
+    ms_table = pd.DataFrame(ms_table, columns=('bx', 'by', 'm_5p'))
     print(ms_table)
-    ms_table.to_csv('v_b_m5p.csv', index=False)
+    ms_table.to_csv('bx_by_m5p_10000_3000000_n98.csv', index=False)
 
-    fig = go.Figure(data=go.Contour(x=vs, y=bs, z=np.log10(ms)))
-    fig.update_xaxes(type="log")
-    fig.update_yaxes(type="log")
+    fig = go.Figure(data=go.Contour(x=bxs, y=bys, z=np.log10(ms)))
+    # fig.update_xaxes(type="log")
+    # fig.update_yaxes(type="log")
     fig.show()
